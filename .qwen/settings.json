@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(flutter *)",
+      "Bash(mkdir *)",
+      "Bash(pip install *)",
+      "Bash(python *)",
+      "Bash(del *)",
+      "Bash(move *)",
+      "Bash(git init)",
+      "Bash(git add *)"
+    ]
+  },
+  "$version": 3
+}
