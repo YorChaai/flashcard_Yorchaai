@@ -8,7 +8,15 @@
       "Bash(del *)",
       "Bash(move *)",
       "Bash(git init)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git config *)",
+      "Bash(git remote *)",
+      "Bash(git push *)",
+      "Bash(.\\gradlew.bat *)",
+      "Bash(select-object *)",
+      "Bash(dir *)",
+      "Bash(adb *)"
     ]
   },
   "$version": 3

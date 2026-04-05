@@ -1,12 +1,12 @@
+import 'dart:math' show pi;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_providers.dart';
+import '../providers/theme_provider.dart';
 import '../models/flashcard_card.dart' as flashcard_models;
 import 'result_screen.dart';
 
-// Font size constants
-const _mainFontSize = 32.0;
-const _extraFontSize = _mainFontSize / 4.0; // 8.0 (1/4 dari main)
+// Shadow and divider constants
 const _shadowColorLight = Color(0x1A000000);
 const _dividerOpacity = 0.5;
 
@@ -22,6 +22,8 @@ class _FlashcardScreenState extends State<FlashcardScreen>
   late AnimationController _animationController;
   late Animation<double> _flipAnimation;
   bool _isShowingBack = false;
+  late double _mainFontSize;
+  late double _subFontSize;
 
   @override
   void initState() {
@@ -33,6 +35,15 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     _flipAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
+    // Read font sizes once at init (won't change during session)
+    _loadFontSizes();
+  }
+
+  void _loadFontSizes() {
+    final deck = context.read<DeckProvider>().selectedDeck;
+    final fontSizeSettings = context.read<ThemeProvider>().fontSizeSettings;
+    _mainFontSize = deck?.mainFontSize ?? fontSizeSettings.currentMainFontSize;
+    _subFontSize = deck?.subFontSize ?? fontSizeSettings.currentSubFontSize;
   }
 
   @override
@@ -64,6 +75,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                 context,
                 MaterialPageRoute(
                   builder: (context) => const ResultScreen(),
+                  settings: const RouteSettings(name: 'ResultScreen'),
                 ),
               );
             },
@@ -121,7 +133,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                         builder: (context, child) {
                           final value = _flipAnimation.value;
                           final showBack = value >= 0.5;
-                          final rotation = value * 3.14159;
+                          final rotation = value * pi;
                           final transform = Matrix4.identity()
                             ..setEntry(3, 2, 0.001)
                             ..rotateY(rotation);
@@ -132,7 +144,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                             child: showBack
                                 ? Transform(
                                     alignment: Alignment.center,
-                                    transform: Matrix4.rotationY(3.14159),
+                                    transform: Matrix4.rotationY(pi),
                                     child: _buildCardBack(currentCard),
                                   )
                                 : _buildCardFront(currentCard),
@@ -251,6 +263,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
           context,
           MaterialPageRoute(
             builder: (context) => const ResultScreen(),
+            settings: const RouteSettings(name: 'ResultScreen'),
           ),
         );
       }
@@ -266,8 +279,8 @@ class _FlashcardScreenState extends State<FlashcardScreen>
           children: [
             Text(
               card.col1,
-              style: const TextStyle(
-                fontSize: 48,
+              style: TextStyle(
+                fontSize: _mainFontSize * 1.2, // Front is slightly larger
                 fontWeight: FontWeight.bold,
               ),
               textAlign: TextAlign.center,
@@ -294,17 +307,16 @@ class _FlashcardScreenState extends State<FlashcardScreen>
         ? Colors.white.withValues(alpha: _dividerOpacity)
         : Colors.black.withValues(alpha: _dividerOpacity);
 
-    // Font sizes: Kolom 1 = main (32pt), Kolom 2-6 = extra (8pt = 1/4 ratio)
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Kolom 1 - MAIN WORD (32pt, besar, tengah)
+            // Kolom 1 - MAIN WORD (dynamic font size)
             Text(
               card.col1,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: _mainFontSize,
                 fontWeight: FontWeight.bold,
               ),
@@ -321,7 +333,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
               const SizedBox(height: 12),
 
               // Layout berdasarkan jumlah extra columns
-              _buildExtraColumnsLayout(extraCols, columnCount, _extraFontSize),
+              _buildExtraColumnsLayout(extraCols, columnCount, _subFontSize),
             ],
           ],
         ),

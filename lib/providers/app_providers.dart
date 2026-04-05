@@ -68,9 +68,10 @@ class DeckProvider extends ChangeNotifier {
   }
 
   String _generateUniqueName(String baseName) {
+    final existingNames = _decks.map((d) => d.name).toSet();
     var counter = 2;
     String newName = '$baseName ($counter)';
-    while (_decks.any((d) => d.name == newName)) {
+    while (existingNames.contains(newName) && counter < 10000) {
       counter++;
       newName = '$baseName ($counter)';
     }
@@ -102,6 +103,20 @@ class DeckProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> updateDeck(Deck updatedDeck) async {
+    final index = _decks.indexWhere((deck) => deck.id == updatedDeck.id);
+    if (index != -1) {
+      _decks[index] = updatedDeck;
+      await _storageService.saveDecks(_decks);
+
+      if (_selectedDeck?.id == updatedDeck.id) {
+        _selectedDeck = updatedDeck;
+      }
+
+      notifyListeners();
+    }
+  }
+
   void selectDeck(Deck deck) {
     _selectedDeck = deck;
     notifyListeners();
@@ -111,6 +126,7 @@ class DeckProvider extends ChangeNotifier {
 class LearningSessionProvider extends ChangeNotifier {
   List<FlashcardCard> _sessionCards = [];
   int _currentIndex = 0;
+  int _knownCount = 0;
   OrderMode _orderMode = OrderMode.normal;
   bool _isFlipped = false;
 
@@ -122,15 +138,16 @@ class LearningSessionProvider extends ChangeNotifier {
   bool get isFlipped => _isFlipped;
   List<FlashcardCard> get sessionCards => _sessionCards;
 
-  int get knownCount => _sessionCards.where((card) => card.known).length;
-  int get unknownCount => _sessionCards.length - knownCount;
+  int get knownCount => _knownCount;
+  int get unknownCount => _sessionCards.length - _knownCount;
   double get progressPercent =>
-      totalCards > 0 ? (knownCount / totalCards) * 100 : 0;
+      totalCards > 0 ? (_knownCount / totalCards) * 100 : 0;
 
   void startSession(List<FlashcardCard> cards, OrderMode mode) {
     if (cards.isEmpty) {
       _sessionCards = [];
       _currentIndex = 0;
+      _knownCount = 0;
       _orderMode = mode;
       _isFlipped = false;
       notifyListeners();
@@ -138,6 +155,7 @@ class LearningSessionProvider extends ChangeNotifier {
     }
 
     var filtered = List<FlashcardCard>.from(cards);
+    _knownCount = filtered.where((card) => card.known).length;
 
     // Apply order mode
     switch (mode) {
@@ -187,8 +205,15 @@ class LearningSessionProvider extends ChangeNotifier {
 
   void markKnown(bool known) {
     if (currentCard != null) {
+      final wasKnown = _sessionCards[_currentIndex].known;
       _sessionCards[_currentIndex] =
           _sessionCards[_currentIndex].copyWith(known: known);
+      // Update cached knownCount
+      if (known && !wasKnown) {
+        _knownCount++;
+      } else if (!known && wasKnown) {
+        _knownCount--;
+      }
       notifyListeners();
     }
   }
@@ -196,6 +221,7 @@ class LearningSessionProvider extends ChangeNotifier {
   void resetSession() {
     _sessionCards = [];
     _currentIndex = 0;
+    _knownCount = 0;
     _isFlipped = false;
     notifyListeners();
   }

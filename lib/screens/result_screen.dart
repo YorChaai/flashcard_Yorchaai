@@ -131,9 +131,14 @@ class ResultScreen extends StatelessWidget {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () {
+                      // Reset session to allow starting fresh
                       sessionProvider.resetSession();
-                      // Use proper navigation to deck detail
-                      Navigator.of(context).pop();
+
+                      // Navigate back to the first non-Flashcard/Result screen (DeckDetailScreen)
+                      Navigator.of(context).popUntil((route) {
+                        final name = route.settings.name ?? '';
+                        return name != 'FlashcardScreen' && name != 'ResultScreen';
+                      });
                     },
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),

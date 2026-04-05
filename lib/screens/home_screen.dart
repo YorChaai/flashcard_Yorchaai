@@ -1,11 +1,13 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import '../providers/app_providers.dart';
 import '../providers/theme_provider.dart';
 import '../models/deck.dart';
+import '../models/font_size_settings.dart';
 import '../services/excel_service.dart';
 import 'deck_detail_screen.dart';
 import 'import_preview_screen.dart';
@@ -23,10 +25,11 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
       final provider = context.read<DeckProvider>();
-      provider.loadDecks();
-      if (provider.decks.isNotEmpty) {
+      await provider.loadDecks();
+      if (mounted && provider.decks.isNotEmpty) {
         setState(() {
           _selectedDataset = provider.decks.first;
         });
@@ -485,62 +488,278 @@ class _HomeScreenState extends State<HomeScreen> {
       BuildContext context, String defaultName) async {
     final controller = TextEditingController(text: defaultName);
 
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Dataset Name'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            labelText: 'Enter dataset name',
+    try {
+      final result = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Dataset Name'),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(
+              labelText: 'Enter dataset name',
+            ),
+            autofocus: true,
           ),
-          autofocus: true,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, controller.text.trim()),
+              child: const Text('Save'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
+      );
 
-    return result;
+      return result;
+    } finally {
+      controller.dispose();
+    }
   }
 
   void _showSettingsDialog(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Settings'),
-        content: Consumer<ThemeProvider>(
-          builder: (context, themeProv, child) {
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SwitchListTile(
+      barrierDismissible: true,
+      builder: (dialogContext) => _SettingsDialog(
+        themeProvider: context.read<ThemeProvider>(),
+      ),
+    );
+  }
+}
+
+class _SettingsDialog extends StatefulWidget {
+  final ThemeProvider themeProvider;
+
+  const _SettingsDialog({required this.themeProvider});
+
+  @override
+  State<_SettingsDialog> createState() => _SettingsDialogState();
+}
+
+class _SettingsDialogState extends State<_SettingsDialog> {
+  late String selectedPlatform;
+  late TextEditingController mainFontSizeController;
+  late TextEditingController subFontSizeController;
+
+  @override
+  void initState() {
+    super.initState();
+    final fontSizeSettings = widget.themeProvider.fontSizeSettings;
+    selectedPlatform = FontSizeSettings.isMobilePlatform() ? 'Mobile/HP' : 'PC/Desktop';
+    mainFontSizeController = TextEditingController(
+      text: _formatFontSize(fontSizeSettings.currentMainFontSize),
+    );
+    subFontSizeController = TextEditingController(
+      text: _formatFontSize(fontSizeSettings.currentSubFontSize),
+    );
+  }
+
+  String _formatFontSize(double size) {
+    // Remove .0 for integer values
+    if (size == size.toInt()) {
+      return size.toInt().toString();
+    }
+    return size.toString();
+  }
+
+  double _parseFontSize(String input) {
+    // Try parsing as int first, then as double
+    final intValue = int.tryParse(input);
+    if (intValue != null) return intValue.toDouble();
+    return double.tryParse(input) ?? 40.0;
+  }
+
+  @override
+  void dispose() {
+    mainFontSizeController.dispose();
+    subFontSizeController.dispose();
+    super.dispose();
+  }
+
+  void updateControllersFromPlatform(String platform) {
+    final fontSizeSettings = widget.themeProvider.fontSizeSettings;
+    setState(() {
+      selectedPlatform = platform;
+      if (platform == 'Mobile/HP') {
+        mainFontSizeController.text = _formatFontSize(fontSizeSettings.mobileMainFontSize);
+        subFontSizeController.text = _formatFontSize(fontSizeSettings.mobileSubFontSize);
+      } else {
+        mainFontSizeController.text = _formatFontSize(fontSizeSettings.pcMainFontSize);
+        subFontSizeController.text = _formatFontSize(fontSizeSettings.pcSubFontSize);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Settings'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Dark Mode
+            Consumer<ThemeProvider>(
+              builder: (context, themeProv, child) {
+                return SwitchListTile(
                   title: const Text('Dark Mode'),
                   subtitle: const Text('Toggle dark/light theme'),
                   value: themeProv.isDarkMode,
                   onChanged: (value) {
                     themeProv.toggleTheme();
                   },
+                );
+              },
+            ),
+
+            const Divider(height: 24),
+
+            // Font Size Settings
+            const Text(
+              'Font Size Settings',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Platform Dropdown
+            Row(
+              children: [
+                const Text('Platform: '),
+                const SizedBox(width: 8),
+                DropdownButton<String>(
+                  value: selectedPlatform,
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'PC/Desktop',
+                      child: Text('PC/Desktop'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'Mobile/HP',
+                      child: Text('Mobile/HP'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      updateControllersFromPlatform(value);
+                    }
+                  },
                 ),
               ],
-            );
-          },
+            ),
+
+            const SizedBox(height: 12),
+
+            // Font Size Inputs
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey[300]!),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                children: [
+                  TextField(
+                    controller: mainFontSizeController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(
+                        RegExp(r'^\d*\.?\d*'),
+                      ),
+                    ],
+                    decoration: const InputDecoration(
+                      labelText: 'Main Column (Kolom 1)',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: subFontSizeController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(
+                        RegExp(r'^\d*\.?\d*'),
+                      ),
+                    ],
+                    decoration: const InputDecoration(
+                      labelText: 'Sub Columns (Kolom 2-6)',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-        ],
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () async {
+            final fontSizeSettings = widget.themeProvider.fontSizeSettings;
+
+            // Parse font sizes - support both int and float input
+            final newMainFontSize = _parseFontSize(mainFontSizeController.text);
+            final newSubFontSize = _parseFontSize(subFontSizeController.text);
+
+            // Validate
+            if (newMainFontSize <= 0 || newSubFontSize <= 0) {
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Font size harus lebih dari 0'),
+                  backgroundColor: Colors.red,
+                ),
+              );
+              return;
+            }
+
+            // Update settings based on selected platform
+            FontSizeSettings updatedSettings;
+            if (selectedPlatform == 'Mobile/HP') {
+              updatedSettings = fontSizeSettings.copyWith(
+                mobileMainFontSize: newMainFontSize,
+                mobileSubFontSize: newSubFontSize,
+              );
+            } else {
+              updatedSettings = fontSizeSettings.copyWith(
+                pcMainFontSize: newMainFontSize,
+                pcSubFontSize: newSubFontSize,
+              );
+            }
+
+            // Save
+            await widget.themeProvider.updateFontSizeSettings(updatedSettings);
+
+            // Close dialog if still mounted
+            if (mounted) {
+              Navigator.of(context).pop();
+            }
+          },
+          child: const Text('Save'),
+        ),
+      ],
     );
   }
 }
