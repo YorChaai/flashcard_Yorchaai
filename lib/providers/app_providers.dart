@@ -16,6 +16,70 @@ class DeckProvider extends ChangeNotifier {
 
   Future<void> loadDecks() async {
     _decks = await _storageService.loadDecks();
+    
+    // Auto-fix any decks that were imported with more than 6 columns
+    // (backward compatibility fix for when 10 columns were allowed)
+    bool needsSave = false;
+    for (int i = 0; i < _decks.length; i++) {
+      final deck = _decks[i];
+      Deck currentDeck = deck;
+      bool modified = false;
+
+      // Fix 1: Truncate decks with > 6 columns
+      if (currentDeck.columnCount > 6) {
+        final newHeaders = currentDeck.columnHeaders.length > 6 
+            ? currentDeck.columnHeaders.sublist(0, 6) 
+            : currentDeck.columnHeaders;
+            
+        final newCards = currentDeck.cards.map((card) {
+          return card.copyWith(
+            columns: card.columns.length > 6 
+                ? card.columns.sublist(0, 6) 
+                : card.columns,
+          );
+        }).toList();
+        
+        currentDeck = currentDeck.copyWith(
+          columnCount: 6,
+          columnHeaders: newHeaders,
+          cards: newCards,
+        );
+        modified = true;
+      }
+
+      // Fix 2: Ensure visibleColumnCount is never greater than columnCount
+      // (This recovers decks corrupted by previous versions)
+      if (currentDeck.visibleColumnCount > currentDeck.columnCount) {
+        currentDeck = currentDeck.copyWith(
+          visibleColumnCount: currentDeck.columnCount,
+        );
+        modified = true;
+      }
+
+      if (modified) {
+        _decks[i] = currentDeck;
+        needsSave = true;
+      }
+    }
+    
+    // Auto-create "Custom Mode" deck if it doesn't exist
+    final hasCustomDeck = _decks.any((d) => d.name == 'Custom Mode');
+    if (!hasCustomDeck) {
+      final customDeck = Deck(
+        id: 'custom_mode_deck_default',
+        name: 'Custom Mode',
+        columnCount: 2,
+        columnHeaders: ['Kata', 'Arti'],
+        cards: [],
+      );
+      _decks.insert(0, customDeck);
+      needsSave = true;
+    }
+
+    if (needsSave) {
+      await _storageService.saveDecks(_decks);
+    }
+    
     notifyListeners();
   }
 
@@ -36,6 +100,8 @@ class DeckProvider extends ChangeNotifier {
     List<int> bytes,
     String customName, {
     String? fileName,
+    String? targetSheetName,
+    List<int>? importOrder,
   }) async {
     try {
       final sanitizedFileName = (fileName ?? 'Imported Deck').replaceAll(
@@ -48,6 +114,8 @@ class DeckProvider extends ChangeNotifier {
         bytes,
         deckName,
         fileName: fileName,
+        targetSheetName: targetSheetName,
+        importOrder: importOrder,
       );
       return deck;
     } catch (e) {
@@ -110,6 +178,21 @@ class DeckProvider extends ChangeNotifier {
       await _storageService.saveDecks(_decks);
 
       if (_selectedDeck?.id == updatedDeck.id) {
+        _selectedDeck = updatedDeck;
+      }
+
+      notifyListeners();
+    }
+  }
+
+  Future<void> updateCardInDeck(String deckId, FlashcardCard updatedCard) async {
+    final index = _decks.indexWhere((deck) => deck.id == deckId);
+    if (index != -1) {
+      final updatedDeck = _decks[index].updateCard(updatedCard);
+      _decks[index] = updatedDeck;
+      await _storageService.saveDecks(_decks);
+
+      if (_selectedDeck?.id == deckId) {
         _selectedDeck = updatedDeck;
       }
 
@@ -203,17 +286,28 @@ class LearningSessionProvider extends ChangeNotifier {
     }
   }
 
-  void markKnown(bool known) {
+  void markKnown(bool known, {Function(FlashcardCard)? onCardUpdated}) {
     if (currentCard != null) {
       final wasKnown = _sessionCards[_currentIndex].known;
-      _sessionCards[_currentIndex] =
-          _sessionCards[_currentIndex].copyWith(known: known);
+      final currentScore = _sessionCards[_currentIndex].score;
+      final newScore = known ? currentScore + 1 : currentScore - 1;
+
+      _sessionCards[_currentIndex] = _sessionCards[_currentIndex].copyWith(
+        known: known,
+        score: newScore,
+      );
+      
       // Update cached knownCount
       if (known && !wasKnown) {
         _knownCount++;
       } else if (!known && wasKnown) {
         _knownCount--;
       }
+
+      if (onCardUpdated != null) {
+        onCardUpdated(_sessionCards[_currentIndex]);
+      }
+
       notifyListeners();
     }
   }

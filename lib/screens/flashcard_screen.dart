@@ -22,8 +22,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
   late AnimationController _animationController;
   late Animation<double> _flipAnimation;
   bool _isShowingBack = false;
-  late double _mainFontSize;
-  late double _subFontSize;
 
   @override
   void initState() {
@@ -35,15 +33,6 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     _flipAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
-    // Read font sizes once at init (won't change during session)
-    _loadFontSizes();
-  }
-
-  void _loadFontSizes() {
-    final deck = context.read<DeckProvider>().selectedDeck;
-    final fontSizeSettings = context.read<ThemeProvider>().fontSizeSettings;
-    _mainFontSize = deck?.mainFontSize ?? fontSizeSettings.currentMainFontSize;
-    _subFontSize = deck?.subFontSize ?? fontSizeSettings.currentSubFontSize;
   }
 
   @override
@@ -167,7 +156,12 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () {
-                      sessionProvider.markKnown(false);
+                      sessionProvider.markKnown(false, onCardUpdated: (updatedCard) {
+                        final deckProvider = context.read<DeckProvider>();
+                        if (deckProvider.selectedDeck != null) {
+                          deckProvider.updateCardInDeck(deckProvider.selectedDeck!.id, updatedCard);
+                        }
+                      });
                       _showNextCardOrResult(sessionProvider);
                     },
                     icon: const Icon(Icons.close),
@@ -183,7 +177,12 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () {
-                      sessionProvider.markKnown(true);
+                      sessionProvider.markKnown(true, onCardUpdated: (updatedCard) {
+                        final deckProvider = context.read<DeckProvider>();
+                        if (deckProvider.selectedDeck != null) {
+                          deckProvider.updateCardInDeck(deckProvider.selectedDeck!.id, updatedCard);
+                        }
+                      });
                       _showNextCardOrResult(sessionProvider);
                     },
                     icon: const Icon(Icons.check),
@@ -271,16 +270,22 @@ class _FlashcardScreenState extends State<FlashcardScreen>
   }
 
   Widget _buildCardFront(flashcard_models.FlashcardCard card) {
-    return Center(
-      child: Padding(
+    // Read font sizes from global settings only (Settings = source of truth)
+    final fontSizeSettings = context.watch<ThemeProvider>().fontSizeSettings;
+    final mainFontSize = fontSizeSettings.currentFontSize1;
+
+    return Stack(
+      children: [
+        Center(
+          child: Padding(
         padding: const EdgeInsets.all(32.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              card.col1,
+              card.columns.isNotEmpty ? card.columns[0] : '',
               style: TextStyle(
-                fontSize: _mainFontSize * 1.2, // Front is slightly larger
+                fontSize: mainFontSize * 1.2, // Front is slightly larger
                 fontWeight: FontWeight.bold,
               ),
               textAlign: TextAlign.center,
@@ -296,28 +301,79 @@ class _FlashcardScreenState extends State<FlashcardScreen>
           ],
         ),
       ),
+        ),
+        Positioned(
+          top: 16,
+          right: 16,
+          child: _buildScoreBadge(card.score),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildScoreBadge(int score) {
+    final color = score > 0
+        ? Colors.green
+        : (score < 0 ? Colors.red : Colors.grey);
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color, width: 1),
+      ),
+      child: Text(
+        'Skor: $score',
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
     );
   }
 
   Widget _buildCardBack(flashcard_models.FlashcardCard card) {
-    final extraCols = card.extraColumns;
-    final columnCount = card.columnCount;
+    final deck = context.read<DeckProvider>().selectedDeck;
+    int visibleColumnCount = deck?.visibleColumnCount ?? card.columnCount;
+    if (visibleColumnCount > card.columnCount) visibleColumnCount = card.columnCount;
+    if (visibleColumnCount < 1) visibleColumnCount = 1;
+
+    final allExtraCols = card.extraColumns;
+    final int maxExtra = visibleColumnCount - 1;
+    List<String> extraCols = allExtraCols.length > maxExtra ? allExtraCols.sublist(0, maxExtra).toList() : allExtraCols.toList();
+    
+    // Remove trailing empty columns so they don't break the layout pairing
+    while (extraCols.isNotEmpty && extraCols.last.trim().isEmpty) {
+      extraCols.removeLast();
+    }
+    
+    final columnCount = visibleColumnCount;
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final dividerColor = isDark
         ? Colors.white.withValues(alpha: _dividerOpacity)
         : Colors.black.withValues(alpha: _dividerOpacity);
 
-    return Center(
-      child: Padding(
+    // Read font sizes from global settings only (Settings = source of truth)
+    final fontSizeSettings = context.watch<ThemeProvider>().fontSizeSettings;
+    final fontSize1 = fontSizeSettings.currentFontSize1;
+    final fontSize23 = fontSizeSettings.currentFontSize23;
+    final fontSize45 = fontSizeSettings.currentFontSize45;
+    final fontSize6 = fontSizeSettings.currentFontSize6;
+
+    return Stack(
+      children: [
+        Center(
+          child: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             // Kolom 1 - MAIN WORD (dynamic font size)
             Text(
-              card.col1,
+              card.columns.isNotEmpty ? card.columns[0] : '',
               style: TextStyle(
-                fontSize: _mainFontSize,
+                fontSize: fontSize1,
                 fontWeight: FontWeight.bold,
               ),
               textAlign: TextAlign.center,
@@ -333,141 +389,90 @@ class _FlashcardScreenState extends State<FlashcardScreen>
               const SizedBox(height: 12),
 
               // Layout berdasarkan jumlah extra columns
-              _buildExtraColumnsLayout(extraCols, columnCount, _subFontSize),
+              _buildExtraColumnsLayout(extraCols, columnCount, fontSize23, fontSize45, fontSize6),
             ],
           ],
         ),
       ),
+        ),
+        Positioned(
+          top: 16,
+          right: 16,
+          child: _buildScoreBadge(card.score),
+        ),
+      ],
     );
   }
 
-  Widget _buildExtraColumnsLayout(List<String> extraCols, int columnCount, double fontSize) {
-    int count = extraCols.length;
+  Widget _buildExtraColumnsLayout(List<String> extraCols, int columnCount, double fontSize23, double fontSize45, double fontSize6) {
+    if (extraCols.isEmpty) return const SizedBox.shrink();
 
-    if (count == 1) {
-      // 2 kolom total: 1 extra (centered)
-      return Text(
-        extraCols[0],
-        style: TextStyle(
-          fontSize: fontSize,
-          color: Colors.grey[600],
-        ),
-        textAlign: TextAlign.center,
-      );
-    } else if (count == 2) {
-      // 3 kolom total: 2 extras horizontal
-      return Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: extraCols.map((col) {
-          return Expanded(
-            child: Text(
-              col,
-              style: TextStyle(
-                fontSize: fontSize,
-                color: Colors.grey[600],
-              ),
-              textAlign: TextAlign.center,
-            ),
-          );
-        }).toList(),
-      );
-    } else if (count == 3) {
-      // 4 kolom total: 2 + 1 dengan divider
-      return Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: extraCols.sublist(0, 2).map((col) {
-              return Expanded(
-                child: Text(
-                  col,
-                  style: TextStyle(
-                    fontSize: fontSize,
-                    color: Colors.grey[600],
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            height: 1,
-            color: Colors.black.withValues(alpha: 0.5),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            extraCols[2],
-            style: TextStyle(
-              fontSize: fontSize,
-              color: Colors.grey[600],
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      );
-    } else if (count >= 4) {
-      // 5-6 kolom total: 2 + 2 dengan divider (dan extra jika ada)
-      List<Widget> rows = [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: extraCols.sublist(0, 2).map((col) {
-            return Expanded(
-              child: Text(
-                col,
-                style: TextStyle(
-                  fontSize: fontSize,
-                  color: Colors.grey[600],
-                ),
-                textAlign: TextAlign.center,
-              ),
-            );
-          }).toList(),
-        ),
-      ];
+    List<Widget> rows = [];
+    for (int i = 0; i < extraCols.length; i += 2) {
+      // Tentukan ukuran font berdasarkan baris
+      double currentFontSize;
+      if (i == 0) {
+        currentFontSize = fontSize23;
+      } else if (i == 2) {
+        currentFontSize = fontSize45;
+      } else {
+        currentFontSize = fontSize6;
+      }
 
-      if (count >= 5) {
+      // Tambahkan divider jika ini bukan baris pertama
+      if (i > 0) {
         rows.add(const SizedBox(height: 8));
         rows.add(Container(
           height: 1,
           color: Colors.black.withValues(alpha: 0.5),
         ));
         rows.add(const SizedBox(height: 8));
+      }
 
-        // Row 2: kolom 4 & 5
+      // Render sepasang kolom (atau 1 kolom jika ganjil di akhir)
+      if (i + 1 < extraCols.length) {
         rows.add(Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: extraCols.sublist(2, count > 4 ? 4 : count).map((col) {
-            return Expanded(
+          children: [
+            Expanded(
               child: Text(
-                col,
+                extraCols[i],
                 style: TextStyle(
-                  fontSize: fontSize,
+                  fontSize: currentFontSize,
                   color: Colors.grey[600],
                 ),
                 textAlign: TextAlign.center,
               ),
-            );
-          }).toList(),
+            ),
+            Expanded(
+              child: Text(
+                extraCols[i + 1],
+                style: TextStyle(
+                  fontSize: currentFontSize,
+                  color: Colors.grey[600],
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ],
         ));
-      }
-
-      // Jika ada kolom 6 (count == 5, extraCols[4])
-      if (count == 5) {
-        rows.add(const SizedBox(height: 8));
-        rows.add(Text(
-          extraCols[4],
-          style: TextStyle(
-            fontSize: fontSize,
-            color: Colors.grey[600],
+      } else {
+        rows.add(
+          SizedBox(
+            width: double.infinity,
+            child: Text(
+              extraCols[i],
+              style: TextStyle(
+                fontSize: currentFontSize,
+                color: Colors.grey[600],
+              ),
+              textAlign: TextAlign.center,
+            ),
           ),
-          textAlign: TextAlign.center,
-        ));
+        );
       }
-
-      return Column(children: rows);
     }
 
-    return const SizedBox.shrink();
+    return Column(children: rows);
   }
 }

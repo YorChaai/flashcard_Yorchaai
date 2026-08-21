@@ -148,6 +148,7 @@ class ImportPreviewScreen extends StatelessWidget {
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: DataTable(
+                columnSpacing: 24.0,
                 columns: metadata.columnHeaders
                     .map((header) => DataColumn(
                           label: Text(
@@ -159,6 +160,18 @@ class ImportPreviewScreen extends StatelessWidget {
                 rows: _buildPreviewRows(context),
               ),
             ),
+            if (metadata.totalRows > 32)
+              Padding(
+                padding: const EdgeInsets.only(top: 12.0),
+                child: Text(
+                  '(${metadata.totalRows - 32} more rows hidden)',
+                  style: TextStyle(
+                    fontStyle: FontStyle.italic,
+                    color: Colors.grey[600],
+                    fontSize: 13,
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -179,12 +192,11 @@ class ImportPreviewScreen extends StatelessWidget {
 
     // Skip indicator
     if (totalRows > 32) {
-      final skippedRows = totalRows - 32;
       rows.add(DataRow(
         cells: [
           DataCell(
             Text(
-              '... ($skippedRows more rows hidden) ...',
+              '...',
               style: TextStyle(
                 fontStyle: FontStyle.italic,
                 color: Colors.grey[600],
@@ -192,7 +204,13 @@ class ImportPreviewScreen extends StatelessWidget {
             ),
           ),
           for (int i = 1; i < metadata.columnCount; i++)
-            const DataCell(Text('')),
+            DataCell(Text(
+              '...',
+              style: TextStyle(
+                fontStyle: FontStyle.italic,
+                color: Colors.grey[600],
+              ),
+            )),
         ],
       ));
     }
@@ -212,10 +230,13 @@ class ImportPreviewScreen extends StatelessWidget {
   DataRow _createDataRow(Map<String, dynamic> rowData) {
     return DataRow(
       cells: [
-        for (int i = 1; i <= metadata.columnCount; i++)
+        for (int i = 0; i < metadata.columnCount; i++)
           DataCell(
             Text(
-              rowData['col$i']?.toString() ?? '',
+              (rowData['columns'] as List<String>?)?.length != null && 
+              i < (rowData['columns'] as List<String>).length
+                  ? rowData['columns'][i].toString()
+                  : '',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),

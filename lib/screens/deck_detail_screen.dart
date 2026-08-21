@@ -6,6 +6,8 @@ import '../providers/theme_provider.dart';
 import '../models/order_mode.dart';
 import '../models/deck.dart';
 import '../models/font_size_settings.dart';
+import '../models/sort_mode.dart';
+import '../models/flashcard_card.dart';
 import 'flashcard_screen.dart';
 import 'learning_preview_screen.dart';
 
@@ -18,8 +20,10 @@ class DeckDetailScreen extends StatefulWidget {
 
 class _DeckDetailScreenState extends State<DeckDetailScreen> {
   OrderMode _selectedMode = OrderMode.normal;
+  SortMode _sortMode = SortMode.original;
   late final TextEditingController _fromController;
   late final TextEditingController _toController;
+  bool _rangeInitialized = false;
 
   @override
   void initState() {
@@ -38,10 +42,13 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Set _toController when deck changes or first load
-    final deck = context.read<DeckProvider>().selectedDeck;
-    if (deck != null && _toController.text.isEmpty) {
-      _toController.text = deck.totalCards.toString();
+    if (!_rangeInitialized) {
+      final deck = context.read<DeckProvider>().selectedDeck;
+      if (deck != null) {
+        _fromController.text = (deck.lastLearningRangeStart ?? 1).toString();
+        _toController.text = (deck.lastLearningRangeEnd ?? deck.totalCards).toString();
+        _rangeInitialized = true;
+      }
     }
   }
 
@@ -55,12 +62,24 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
       );
     }
 
+    // Fix for when starting from 0 cards
+    if (int.tryParse(_toController.text) == 0 && deck.totalCards > 0) {
+      _toController.text = deck.totalCards.toString();
+    }
+
     // Set _toController if empty (moved from here to didChangeDependencies)
 
     return Scaffold(
       appBar: AppBar(
         title: Text(deck.name),
       ),
+      floatingActionButton: deck.id == 'custom_mode_deck_default'
+          ? FloatingActionButton(
+              onPressed: () => _showAddCardDialog(context, deck),
+              tooltip: 'Add Custom Card',
+              child: const Icon(Icons.add),
+            )
+          : null,
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -146,6 +165,49 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
             const SizedBox(height: 24),
 
             const Text(
+              'Sort By',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<SortMode>(
+                    isExpanded: true,
+                    value: _sortMode,
+                    items: const [
+                      DropdownMenuItem(
+                        value: SortMode.original,
+                        child: Text('Original Order (As in File)'),
+                      ),
+                      DropdownMenuItem(
+                        value: SortMode.lowestScore,
+                        child: Text('Lowest Score First (Paling Tidak Tahu)'),
+                      ),
+                      DropdownMenuItem(
+                        value: SortMode.highestScore,
+                        child: Text('Highest Score First (Paling Banyak Tahu)'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setState(() {
+                          _sortMode = value;
+                        });
+                      }
+                    },
+                  ),
+                ),
+              ),
+            ),
+            
+            const SizedBox(height: 24),
+
+            const Text(
               'Learning Range',
               style: TextStyle(
                 fontSize: 18,
@@ -173,7 +235,7 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                         TextButton.icon(
                           onPressed: () => _previewLearning(deck),
                           icon: const Icon(Icons.preview, size: 20),
-                          label: const Text('Preview'),
+                          label: const Text('Library Preview'),
                           style: TextButton.styleFrom(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             minimumSize: Size.zero,
@@ -316,28 +378,58 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
     );
   }
 
+  List<FlashcardCard> _getSortedCards(Deck deck) {
+    List<FlashcardCard> sortedList = List.from(deck.cards);
+    switch (_sortMode) {
+      case SortMode.lowestScore:
+        sortedList.sort((a, b) => a.score.compareTo(b.score));
+        break;
+      case SortMode.highestScore:
+        sortedList.sort((a, b) => b.score.compareTo(a.score));
+        break;
+      case SortMode.original:
+        break;
+    }
+    return sortedList;
+  }
+
   void _startLearning() {
     final deck = context.read<DeckProvider>().selectedDeck;
     if (deck == null || deck.cards.isEmpty) return;
+    
+    final sortedCards = _getSortedCards(deck);
 
-    final from = int.tryParse(_fromController.text) ?? 1;
-    final to = int.tryParse(_toController.text) ?? deck.totalCards;
+    int from = int.tryParse(_fromController.text) ?? 1;
+    int to = int.tryParse(_toController.text) ?? deck.totalCards;
 
-    if (from < 1 || to < 1 || from > deck.totalCards || to > deck.totalCards) {
-      _showRangeError('Range harus di antara 1 sampai ${deck.totalCards}.');
-      return;
-    }
+    // Auto-clamp values
+    if (from < 1) from = 1;
+    if (from > deck.totalCards) from = deck.totalCards;
+    
+    if (to < 1) to = 1;
+    if (to > deck.totalCards) to = deck.totalCards;
 
     if (from > to) {
-      _showRangeError('Nilai "From" tidak boleh lebih besar dari "To".');
-      return;
+      final temp = from;
+      from = to;
+      to = temp;
     }
+    
+    // Update UI to reflect clamped values
+    _fromController.text = from.toString();
+    _toController.text = to.toString();
 
-    final selectedCards = deck.cards.sublist(from - 1, to);
+    final selectedCards = sortedCards.sublist(from - 1, to);
     if (selectedCards.isEmpty) {
       _showRangeError('Tidak ada data pada range yang dipilih.');
       return;
     }
+
+    final updatedDeck = deck.copyWith(
+      lastLearningRangeStart: from,
+      lastLearningRangeEnd: to,
+    );
+    context.read<DeckProvider>().updateDeck(updatedDeck);
 
     context.read<LearningSessionProvider>().startSession(
           selectedCards,
@@ -355,25 +447,40 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
 
   void _previewLearning(Deck deck) {
     if (deck.cards.isEmpty) return;
+    
+    final sortedCards = _getSortedCards(deck);
 
-    final from = int.tryParse(_fromController.text) ?? 1;
-    final to = int.tryParse(_toController.text) ?? deck.totalCards;
+    int from = int.tryParse(_fromController.text) ?? 1;
+    int to = int.tryParse(_toController.text) ?? deck.totalCards;
 
-    if (from < 1 || to < 1 || from > deck.totalCards || to > deck.totalCards) {
-      _showRangeError('Range harus di antara 1 sampai ${deck.totalCards}.');
-      return;
-    }
+    // Auto-clamp values
+    if (from < 1) from = 1;
+    if (from > deck.totalCards) from = deck.totalCards;
+    
+    if (to < 1) to = 1;
+    if (to > deck.totalCards) to = deck.totalCards;
 
     if (from > to) {
-      _showRangeError('Nilai "From" tidak boleh lebih besar dari "To".');
-      return;
+      final temp = from;
+      from = to;
+      to = temp;
     }
 
-    final selectedCards = deck.cards.sublist(from - 1, to);
+    // Update UI to reflect clamped values
+    _fromController.text = from.toString();
+    _toController.text = to.toString();
+
+    final selectedCards = sortedCards.sublist(from - 1, to);
     if (selectedCards.isEmpty) {
       _showRangeError('Tidak ada data pada range yang dipilih.');
       return;
     }
+
+    final updatedDeck = deck.copyWith(
+      lastLearningRangeStart: from,
+      lastLearningRangeEnd: to,
+    );
+    context.read<DeckProvider>().updateDeck(updatedDeck);
 
     Navigator.push(
       context,
@@ -399,6 +506,11 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
     // State untuk urutan kolom saat ini
     final columnOrder = List<int>.generate(deck.columnCount, (i) => i);
     final columnHeaders = List<String>.from(deck.columnHeaders);
+    int visibleColumnCount = deck.visibleColumnCount.clamp(1, deck.columnCount);
+
+    // Get global settings (Settings = source of truth)
+    final themeProvider = context.read<ThemeProvider>();
+    final fontSizeSettings = themeProvider.fontSizeSettings;
 
     // Helper functions
     String formatFontSize(double size) {
@@ -408,18 +520,23 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
       return size.toString();
     }
 
-    double parseFontSize(String input) {
+    double? parseFontSize(String input) {
       final intValue = int.tryParse(input);
       if (intValue != null) return intValue.toDouble();
-      return double.tryParse(input) ?? 40.0;
+      return double.tryParse(input); // Returns null if invalid
     }
 
-    // Controllers untuk font sizes (use deck override)
-    final mainFontSizeController = TextEditingController(
-      text: formatFontSize(deck.mainFontSize),
+    final fontSize1Controller = TextEditingController(
+      text: formatFontSize(fontSizeSettings.currentFontSize1),
     );
-    final subFontSizeController = TextEditingController(
-      text: formatFontSize(deck.subFontSize),
+    final fontSize23Controller = TextEditingController(
+      text: formatFontSize(fontSizeSettings.currentFontSize23),
+    );
+    final fontSize45Controller = TextEditingController(
+      text: formatFontSize(fontSizeSettings.currentFontSize45),
+    );
+    final fontSize6Controller = TextEditingController(
+      text: formatFontSize(fontSizeSettings.currentFontSize6),
     );
 
     showDialog(
@@ -451,12 +568,73 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Section: Column Order
-                  const Text(
-                    'Column Order',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Column Order',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).brightness == Brightness.dark 
+                              ? Colors.grey[800] 
+                              : Colors.grey[200],
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Theme.of(context).brightness == Brightness.dark 
+                                ? Colors.grey[700]! 
+                                : Colors.grey[300]!,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('Show: ', 
+                                style: TextStyle(
+                                  fontSize: 12, 
+                                  color: Theme.of(context).brightness == Brightness.dark 
+                                      ? Colors.white70 
+                                      : Colors.black87
+                                )),
+                            DropdownButtonHideUnderline(
+                              child: DropdownButton<int>(
+                                dropdownColor: Theme.of(context).brightness == Brightness.dark 
+                                    ? Colors.grey[800] 
+                                    : Colors.white,
+                                value: visibleColumnCount,
+                                isDense: true,
+                                iconSize: 18,
+                                iconEnabledColor: Theme.of(context).brightness == Brightness.dark 
+                                    ? Colors.white 
+                                    : Colors.black,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(context).brightness == Brightness.dark 
+                                      ? Colors.white 
+                                      : Colors.black,
+                                ),
+                                items: List.generate(deck.columnCount, (i) => i + 1).map((val) {
+                                  return DropdownMenuItem(value: val, child: Text('$val'));
+                                }).toList(),
+                                onChanged: (val) {
+                                  if (val != null) {
+                                    setDialogState(() {
+                                      visibleColumnCount = val;
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 8),
                   Container(
@@ -578,44 +756,46 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                     child: Column(
                       children: [
                         TextField(
-                          controller: mainFontSizeController,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          inputFormatters: [
-                            FilteringTextInputFormatter.allow(
-                              RegExp(r'^\d*\.?\d*'),
-                            ),
-                          ],
+                          controller: fontSize1Controller,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
                           decoration: const InputDecoration(
-                            labelText: 'Main Column (Kolom 1)',
-                            hintText: '40',
+                            labelText: 'Kolom 1 (Atas Tengah)',
                             border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           ),
                         ),
                         const SizedBox(height: 12),
                         TextField(
-                          controller: subFontSizeController,
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          inputFormatters: [
-                            FilteringTextInputFormatter.allow(
-                              RegExp(r'^\d*\.?\d*'),
-                            ),
-                          ],
+                          controller: fontSize23Controller,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
                           decoration: const InputDecoration(
-                            labelText: 'Sub Columns (Kolom 2-6)',
-                            hintText: '8',
+                            labelText: 'Kolom 2 & 3',
                             border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: fontSize45Controller,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
+                          decoration: const InputDecoration(
+                            labelText: 'Kolom 4 & 5',
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: fontSize6Controller,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
+                          decoration: const InputDecoration(
+                            labelText: 'Kolom 6 (Bawah)',
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           ),
                         ),
                       ],
@@ -627,9 +807,6 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
             actions: [
               TextButton(
                 onPressed: () {
-                  // Cleanup controllers
-                  mainFontSizeController.dispose();
-                  subFontSizeController.dispose();
                   Navigator.pop(context);
                 },
                 child: const Text('Cancel'),
@@ -637,11 +814,16 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
               ElevatedButton(
                 onPressed: () async {
                   // Parse font sizes - support both int and float input
-                  final newMainFontSize = parseFontSize(mainFontSizeController.text);
-                  final newSubFontSize = parseFontSize(subFontSizeController.text);
+                  final double? newSize1 = parseFontSize(fontSize1Controller.text);
+                  final double? newSize23 = parseFontSize(fontSize23Controller.text);
+                  final double? newSize45 = parseFontSize(fontSize45Controller.text);
+                  final double? newSize6 = parseFontSize(fontSize6Controller.text);
 
                   // Validate font sizes
-                  if (newMainFontSize <= 0 || newSubFontSize <= 0) {
+                  if ((newSize1 != null && newSize1 <= 0) ||
+                      (newSize23 != null && newSize23 <= 0) ||
+                      (newSize45 != null && newSize45 <= 0) ||
+                      (newSize6 != null && newSize6 <= 0)) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text('Font size harus lebih dari 0'),
@@ -651,8 +833,32 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                     return;
                   }
 
-                  // Apply column reorder using proper permutation mapping
-                  // columnOrder[i] = original index of column that should be at position i
+                  // Update GLOBAL SETTINGS (Settings = source of truth)
+                  final themeProvider = context.read<ThemeProvider>();
+                  final deckProvider = context.read<DeckProvider>();
+                  final currentSettings = themeProvider.fontSizeSettings;
+
+                  // Update appropriate platform settings
+                  FontSizeSettings updatedSettings;
+                  if (FontSizeSettings.isMobilePlatform()) {
+                    updatedSettings = currentSettings.copyWith(
+                      mobileFontSize1: newSize1 ?? currentSettings.mobileFontSize1,
+                      mobileFontSize23: newSize23 ?? currentSettings.mobileFontSize23,
+                      mobileFontSize45: newSize45 ?? currentSettings.mobileFontSize45,
+                      mobileFontSize6: newSize6 ?? currentSettings.mobileFontSize6,
+                    );
+                  } else {
+                    updatedSettings = currentSettings.copyWith(
+                      pcFontSize1: newSize1 ?? currentSettings.pcFontSize1,
+                      pcFontSize23: newSize23 ?? currentSettings.pcFontSize23,
+                      pcFontSize45: newSize45 ?? currentSettings.pcFontSize45,
+                      pcFontSize6: newSize6 ?? currentSettings.pcFontSize6,
+                    );
+                  }
+
+                  await themeProvider.updateFontSizeSettings(updatedSettings);
+
+                  // Apply column reorder to deck (deck only handles column order, not font sizes)
                   var updatedDeck = deck;
 
                   // Apply swaps to transform current order to target order
@@ -671,31 +877,20 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                     }
                   }
 
-                  // Update font sizes
-                  updatedDeck = updatedDeck.copyWith(
-                    mainFontSize: newMainFontSize,
-                    subFontSize: newSubFontSize,
-                  );
-
-                  // Save to provider
-                  final deckProvider = context.read<DeckProvider>();
+                  // Save deck (column order and visible count changes)
+                  updatedDeck = updatedDeck.copyWith(visibleColumnCount: visibleColumnCount);
                   await deckProvider.updateDeck(updatedDeck);
 
-                  // Check if widget is still mounted before using context
-                  if (!context.mounted) return;
-
-                  // Cleanup controllers
-                  mainFontSizeController.dispose();
-                  subFontSizeController.dispose();
-
-                  Navigator.pop(context);
-
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Column settings saved'),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
+                  // Check if context is still mounted before using it
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Settings saved'),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  }
                 },
                 child: const Text('Save'),
               ),
@@ -703,6 +898,159 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
           );
         },
       ),
+    ).then((_) {
+      Future.delayed(const Duration(milliseconds: 400), () {
+        fontSize1Controller.dispose();
+        fontSize23Controller.dispose();
+        fontSize45Controller.dispose();
+        fontSize6Controller.dispose();
+      });
+    });
+  }
+
+  void _showAddCardDialog(BuildContext context, Deck currentDeck) {
+    final kataController = TextEditingController();
+    final artiController = TextEditingController();
+    final deckProvider = context.read<DeckProvider>();
+    final availableDecks = deckProvider.decks.where((d) => d.id != currentDeck.id).toList();
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Tambah Kata Baru'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: kataController,
+                      decoration: const InputDecoration(
+                        labelText: 'Kata',
+                        border: OutlineInputBorder(),
+                      ),
+                      autofocus: true,
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: artiController,
+                      decoration: const InputDecoration(
+                        labelText: 'Arti',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final kata = kataController.text.trim();
+                    final arti = artiController.text.trim();
+                    if (kata.isEmpty) return;
+
+                    List<String> newHeaders = List.from(currentDeck.columnHeaders);
+                    if (newHeaders.length < 2) {
+                      newHeaders = ['Kata', 'Arti'];
+                    }
+
+                    Deck targetDeck = currentDeck;
+                    bool foundAny = false;
+                    int addedCount = 0;
+
+                    for (final deck in availableDecks) {
+                      FlashcardCard? matchInDeck;
+                      for (final card in deck.cards) {
+                        if (card.columns.any((col) => col.toLowerCase().trim() == kata.toLowerCase())) {
+                          matchInDeck = card;
+                          break;
+                        }
+                      }
+
+                      if (matchInDeck != null) {
+                        foundAny = true;
+                        addedCount++;
+                        
+                        List<String> newColumns = [kata, arti, deck.name]; // Source file di kolom ke-3
+                        newColumns.addAll(matchInDeck.columns);
+                        
+                        int requiredCols = newColumns.length;
+                        
+                        // Perluas headers jika perlu
+                        for (int i = newHeaders.length; i < requiredCols; i++) {
+                          if (i == 2) {
+                            newHeaders.add('Source File');
+                          } else {
+                            if (i - 3 >= 0 && i - 3 < deck.columnHeaders.length) {
+                              newHeaders.add(deck.columnHeaders[i - 3]);
+                            } else {
+                              newHeaders.add('Col ${i + 1}');
+                            }
+                          }
+                        }
+
+                        // Samakan jumlah kolom dengan deck utama
+                        if (newColumns.length > targetDeck.columnCount) {
+                           targetDeck = targetDeck.upgradeColumnCount(newColumns.length, newHeaders);
+                        } else if (newColumns.length < targetDeck.columnCount) {
+                           while(newColumns.length < targetDeck.columnCount) {
+                             newColumns.add('');
+                           }
+                        }
+
+                        final newCard = FlashcardCard(columns: newColumns);
+                        targetDeck = targetDeck.addCard(newCard);
+                      }
+                    }
+
+                    // Jika tidak ditemukan di file manapun
+                    if (!foundAny) {
+                        addedCount = 1;
+                        List<String> newColumns = [kata, arti, 'Manual/Custom']; // Pastikan ada kolom ke-3
+                        
+                        int requiredCols = newColumns.length;
+                        for (int i = newHeaders.length; i < requiredCols; i++) {
+                          if (i == 2) {
+                            newHeaders.add('Source File');
+                          } else {
+                            newHeaders.add('Col ${i + 1}');
+                          }
+                        }
+
+                        if (newColumns.length > targetDeck.columnCount) {
+                           targetDeck = targetDeck.upgradeColumnCount(newColumns.length, newHeaders);
+                        } else if (newColumns.length < targetDeck.columnCount) {
+                           while(newColumns.length < targetDeck.columnCount) {
+                             newColumns.add('');
+                           }
+                        }
+                        
+                        final newCard = FlashcardCard(columns: newColumns);
+                        targetDeck = targetDeck.addCard(newCard);
+                    }
+
+                    await deckProvider.updateDeck(targetDeck);
+
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Kata "$kata" berhasil ditambahkan!')),
+                      );
+                    }
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          }
+        );
+      },
     );
   }
 }
+

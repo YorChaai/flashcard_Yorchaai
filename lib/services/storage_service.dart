@@ -5,6 +5,8 @@ import '../models/deck.dart';
 
 class StorageService {
   static const String _decksKey = 'yorflashcard_decks';
+  static const String _refDeckKey = 'yorflashcard_ref_deck_id';
+  static const String _lastDeckKey = 'yorflashcard_last_deck_id';
   static SharedPreferences? _prefs;
 
   Future<SharedPreferences> _getPrefs() async {
@@ -38,6 +40,34 @@ class StorageService {
     } catch (e) {
       debugPrint('ERROR: Failed to save decks: $e');
       rethrow;
+    }
+  }
+
+  Future<String?> getReferenceDeckId() async {
+    final prefs = await _getPrefs();
+    return prefs.getString(_refDeckKey);
+  }
+
+  Future<void> setReferenceDeckId(String? id) async {
+    final prefs = await _getPrefs();
+    if (id == null) {
+      await prefs.remove(_refDeckKey);
+    } else {
+      await prefs.setString(_refDeckKey, id);
+    }
+  }
+
+  Future<String?> getLastSelectedDeckId() async {
+    final prefs = await _getPrefs();
+    return prefs.getString(_lastDeckKey);
+  }
+
+  Future<void> setLastSelectedDeckId(String? id) async {
+    final prefs = await _getPrefs();
+    if (id == null) {
+      await prefs.remove(_lastDeckKey);
+    } else {
+      await prefs.setString(_lastDeckKey, id);
     }
   }
 

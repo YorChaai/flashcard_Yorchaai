@@ -11,6 +11,10 @@ import '../models/font_size_settings.dart';
 import '../services/excel_service.dart';
 import 'deck_detail_screen.dart';
 import 'import_preview_screen.dart';
+import 'export_mapping_dialog.dart';
+import 'sheet_selection_dialog.dart';
+import 'import_mapping_dialog.dart';
+import '../services/storage_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -30,8 +34,21 @@ class _HomeScreenState extends State<HomeScreen> {
       final provider = context.read<DeckProvider>();
       await provider.loadDecks();
       if (mounted && provider.decks.isNotEmpty) {
+        final lastDeckId = await StorageService().getLastSelectedDeckId();
+        Deck? savedDeck;
+        if (lastDeckId != null) {
+          try {
+            savedDeck = provider.decks.firstWhere((d) => d.id == lastDeckId);
+          } catch (_) {
+            savedDeck = null;
+          }
+        }
+        
+        // If no saved deck or saved deck is 'Custom Mode', and there are other decks, prefer the second one
+        savedDeck ??= provider.decks.firstWhere((d) => d.id != 'custom_mode_deck_default', orElse: () => provider.decks.first);
+
         setState(() {
-          _selectedDataset = provider.decks.first;
+          _selectedDataset = savedDeck;
         });
       }
     });
@@ -163,6 +180,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             const SizedBox(height: 12),
                             DropdownButtonFormField<Deck>(
+                              isExpanded: true,
                               initialValue: _selectedDataset,
                               decoration: InputDecoration(
                                 border: OutlineInputBorder(
@@ -188,6 +206,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   setState(() {
                                     _selectedDataset = value;
                                   });
+                                  StorageService().setLastSelectedDeckId(value.id);
                                 }
                               },
                             ),
@@ -405,49 +424,152 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
-      debugPrint('>>> STEP 8: Getting file metadata from bytes...');
-      FileMetadata metadata;
-      try {
-        metadata = await ExcelService.getFileMetadataFromBytes(fileBytes, fileName);
-      } catch (e) {
-        debugPrint('>>> STEP 8 ERROR: Excel parsing failed. Trying fallback parser...');
-        metadata = await ExcelService.getFileMetadataFallback(fileBytes, fileName);
+      // Show loading dialog for initial processing
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const AlertDialog(
+            content: Row(
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(width: 16),
+                Expanded(child: Text('Membaca file Excel...')),
+              ],
+            ),
+          ),
+        );
       }
 
-      debugPrint('>>> STEP 9: Metadata retrieved:');
-      debugPrint('   - File: ${metadata.fileName}');
-      debugPrint('   - Sheet: ${metadata.sheetName}');
-      debugPrint('   - Columns: ${metadata.columnCount}');
-      debugPrint('   - Total rows: ${metadata.totalRows}');
+      debugPrint('>>> STEP 8: Getting available sheets...');
+      List<String> sheets = await ExcelService.getAvailableSheets(fileBytes);
+      
+      if (mounted) {
+        Navigator.of(context).pop(); // dismiss loading
+      }
+
+      if (sheets.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Gagal memperbaiki file. Harap "Save As" ke file baru atau simpan sebagai CSV.')),
+          );
+        }
+        return;
+      }
+
+      String? targetSheetName;
+      List<int>? importOrder;
+      FileMetadata? mappedMetadata;
+
+      while (true) {
+        if (sheets.length > 1) {
+          if (!mounted) return;
+          targetSheetName = await showDialog<String>(
+            context: context,
+            builder: (context) => SheetSelectionDialog(sheets: sheets),
+          );
+          if (targetSheetName == null) return; // User canceled
+        } else {
+          targetSheetName = sheets.first;
+        }
+
+        if (mounted) {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => const AlertDialog(
+              content: Row(
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(width: 16),
+                  Expanded(child: Text('Membaca struktur sheet...')),
+                ],
+              ),
+            ),
+          );
+        }
+
+        debugPrint('>>> STEP 9: Getting file metadata from bytes...');
+        FileMetadata rawMetadata;
+        rawMetadata = await ExcelService.getFileMetadataFromBytes(fileBytes, fileName, targetSheetName: targetSheetName);
+
+        if (mounted) {
+          Navigator.of(context).pop(); // dismiss loading
+        }
+
+        if (!mounted) return;
+        
+        debugPrint('>>> STEP 10: Showing Import Mapping Dialog...');
+        final result = await showDialog<dynamic>(
+          context: context,
+          builder: (context) => ImportMappingDialog(
+            metadata: rawMetadata,
+            showBackButton: sheets.length > 1,
+          ),
+        );
+        
+        if (result == null) return; // User canceled
+        if (result == 'BACK') {
+          continue; // Go back to sheet selection
+        }
+        
+        importOrder = result as List<int>;
+        
+        // Apply mapping to metadata for preview
+        mappedMetadata = rawMetadata.applyMapping(importOrder);
+        break; // Exit loop and continue to preview
+      }
 
       if (!mounted) return;
 
-      debugPrint('>>> STEP 10: Navigating to preview screen...');
+      debugPrint('>>> STEP 11: Navigating to preview screen...');
       final confirmed = await Navigator.push<bool>(
         context,
         MaterialPageRoute(
           builder: (context) => ImportPreviewScreen(
             filePath: filePath,
-            metadata: metadata,
+            metadata: mappedMetadata!,
           ),
         ),
       );
 
-      debugPrint('>>> STEP 11: Preview result: $confirmed');
+      debugPrint('>>> STEP 12: Preview result: $confirmed');
       if (confirmed != true || !mounted) return;
 
-      debugPrint('>>> STEP 12: Showing name input dialog...');
-      final name = await _showNameInputDialog(context, metadata.fileName);
-      debugPrint('>>> STEP 13: Name input result: $name');
+      debugPrint('>>> STEP 13: Showing name input dialog...');
+      final name = await _showNameInputDialog(context, mappedMetadata.fileName);
+      debugPrint('>>> STEP 14: Name input result: $name');
       if (name == null || name.isEmpty || !mounted) return;
 
-      debugPrint('>>> STEP 14: Importing deck...');
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const AlertDialog(
+            content: Row(
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(width: 16),
+                Expanded(child: Text('Menyimpan dataset...')),
+              ],
+            ),
+          ),
+        );
+      }
+
+      debugPrint('>>> STEP 15: Importing deck...');
       final deckProvider = context.read<DeckProvider>();
       final deck = await deckProvider.importDeckFromFileBytes(
         fileBytes,
         name,
         fileName: fileName,
+        targetSheetName: targetSheetName,
+        importOrder: importOrder,
       );
+
+      if (mounted) {
+        Navigator.of(context).pop(); // dismiss loading
+      }
 
       debugPrint('>>> STEP 15: Deck imported: ${deck?.name}');
       if (deck != null && mounted) {
@@ -473,6 +595,9 @@ class _HomeScreenState extends State<HomeScreen> {
       debugPrint('>>> Stack trace:\n$stackTrace');
       debugPrint('>>> !!! END ERROR !!!');
       if (mounted) {
+        // Just in case loading dialog is still open
+        Navigator.of(context).popUntil((route) => route.isFirst);
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error importing: $e'),
@@ -515,7 +640,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
       return result;
     } finally {
-      controller.dispose();
+      Future.delayed(const Duration(milliseconds: 400), () {
+        controller.dispose();
+      });
     }
   }
 
@@ -541,41 +668,49 @@ class _SettingsDialog extends StatefulWidget {
 
 class _SettingsDialogState extends State<_SettingsDialog> {
   late String selectedPlatform;
-  late TextEditingController mainFontSizeController;
-  late TextEditingController subFontSizeController;
+  late TextEditingController fontSize1Controller;
+  late TextEditingController fontSize23Controller;
+  late TextEditingController fontSize45Controller;
+  late TextEditingController fontSize6Controller;
 
   @override
   void initState() {
     super.initState();
     final fontSizeSettings = widget.themeProvider.fontSizeSettings;
     selectedPlatform = FontSizeSettings.isMobilePlatform() ? 'Mobile/HP' : 'PC/Desktop';
-    mainFontSizeController = TextEditingController(
-      text: _formatFontSize(fontSizeSettings.currentMainFontSize),
+    fontSize1Controller = TextEditingController(
+      text: _formatFontSize(fontSizeSettings.currentFontSize1),
     );
-    subFontSizeController = TextEditingController(
-      text: _formatFontSize(fontSizeSettings.currentSubFontSize),
+    fontSize23Controller = TextEditingController(
+      text: _formatFontSize(fontSizeSettings.currentFontSize23),
+    );
+    fontSize45Controller = TextEditingController(
+      text: _formatFontSize(fontSizeSettings.currentFontSize45),
+    );
+    fontSize6Controller = TextEditingController(
+      text: _formatFontSize(fontSizeSettings.currentFontSize6),
     );
   }
 
   String _formatFontSize(double size) {
-    // Remove .0 for integer values
     if (size == size.toInt()) {
       return size.toInt().toString();
     }
     return size.toString();
   }
 
-  double _parseFontSize(String input) {
-    // Try parsing as int first, then as double
+  double _parseFontSize(String input, double fallback) {
     final intValue = int.tryParse(input);
     if (intValue != null) return intValue.toDouble();
-    return double.tryParse(input) ?? 40.0;
+    return double.tryParse(input) ?? fallback;
   }
 
   @override
   void dispose() {
-    mainFontSizeController.dispose();
-    subFontSizeController.dispose();
+    fontSize1Controller.dispose();
+    fontSize23Controller.dispose();
+    fontSize45Controller.dispose();
+    fontSize6Controller.dispose();
     super.dispose();
   }
 
@@ -584,11 +719,15 @@ class _SettingsDialogState extends State<_SettingsDialog> {
     setState(() {
       selectedPlatform = platform;
       if (platform == 'Mobile/HP') {
-        mainFontSizeController.text = _formatFontSize(fontSizeSettings.mobileMainFontSize);
-        subFontSizeController.text = _formatFontSize(fontSizeSettings.mobileSubFontSize);
+        fontSize1Controller.text = _formatFontSize(fontSizeSettings.mobileFontSize1);
+        fontSize23Controller.text = _formatFontSize(fontSizeSettings.mobileFontSize23);
+        fontSize45Controller.text = _formatFontSize(fontSizeSettings.mobileFontSize45);
+        fontSize6Controller.text = _formatFontSize(fontSizeSettings.mobileFontSize6);
       } else {
-        mainFontSizeController.text = _formatFontSize(fontSizeSettings.pcMainFontSize);
-        subFontSizeController.text = _formatFontSize(fontSizeSettings.pcSubFontSize);
+        fontSize1Controller.text = _formatFontSize(fontSizeSettings.pcFontSize1);
+        fontSize23Controller.text = _formatFontSize(fontSizeSettings.pcFontSize23);
+        fontSize45Controller.text = _formatFontSize(fontSizeSettings.pcFontSize45);
+        fontSize6Controller.text = _formatFontSize(fontSizeSettings.pcFontSize6);
       }
     });
   }
@@ -666,46 +805,69 @@ class _SettingsDialogState extends State<_SettingsDialog> {
               child: Column(
                 children: [
                   TextField(
-                    controller: mainFontSizeController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(
-                        RegExp(r'^\d*\.?\d*'),
-                      ),
-                    ],
+                    controller: fontSize1Controller,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
                     decoration: const InputDecoration(
-                      labelText: 'Main Column (Kolom 1)',
+                      labelText: 'Kolom 1 (Atas Tengah)',
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     ),
                   ),
                   const SizedBox(height: 12),
                   TextField(
-                    controller: subFontSizeController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(
-                        RegExp(r'^\d*\.?\d*'),
-                      ),
-                    ],
+                    controller: fontSize23Controller,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
                     decoration: const InputDecoration(
-                      labelText: 'Sub Columns (Kolom 2-6)',
+                      labelText: 'Kolom 2 & 3',
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: fontSize45Controller,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
+                    decoration: const InputDecoration(
+                      labelText: 'Kolom 4 & 5',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: fontSize6Controller,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
+                    decoration: const InputDecoration(
+                      labelText: 'Kolom 6 (Bawah)',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     ),
                   ),
                 ],
               ),
+            ),
+            const Divider(height: 24),
+            
+            // Export Settings
+            const Text(
+              'Export Data',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Consumer<DeckProvider>(
+              builder: (context, deckProvider, child) {
+                if (deckProvider.decks.isEmpty) {
+                  return const Text('Tidak ada deck untuk di-export.');
+                }
+                return _ExportDeckWidget(decks: deckProvider.decks);
+              },
             ),
           ],
         ),
@@ -719,12 +881,12 @@ class _SettingsDialogState extends State<_SettingsDialog> {
           onPressed: () async {
             final fontSizeSettings = widget.themeProvider.fontSizeSettings;
 
-            // Parse font sizes - support both int and float input
-            final newMainFontSize = _parseFontSize(mainFontSizeController.text);
-            final newSubFontSize = _parseFontSize(subFontSizeController.text);
+            final newSize1 = _parseFontSize(fontSize1Controller.text, 40.0);
+            final newSize23 = _parseFontSize(fontSize23Controller.text, 16.0);
+            final newSize45 = _parseFontSize(fontSize45Controller.text, 12.0);
+            final newSize6 = _parseFontSize(fontSize6Controller.text, 12.0);
 
-            // Validate
-            if (newMainFontSize <= 0 || newSubFontSize <= 0) {
+            if (newSize1 <= 0 || newSize23 <= 0 || newSize45 <= 0 || newSize6 <= 0) {
               if (!mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -735,25 +897,26 @@ class _SettingsDialogState extends State<_SettingsDialog> {
               return;
             }
 
-            // Update settings based on selected platform
             FontSizeSettings updatedSettings;
             if (selectedPlatform == 'Mobile/HP') {
               updatedSettings = fontSizeSettings.copyWith(
-                mobileMainFontSize: newMainFontSize,
-                mobileSubFontSize: newSubFontSize,
+                mobileFontSize1: newSize1,
+                mobileFontSize23: newSize23,
+                mobileFontSize45: newSize45,
+                mobileFontSize6: newSize6,
               );
             } else {
               updatedSettings = fontSizeSettings.copyWith(
-                pcMainFontSize: newMainFontSize,
-                pcSubFontSize: newSubFontSize,
+                pcFontSize1: newSize1,
+                pcFontSize23: newSize23,
+                pcFontSize45: newSize45,
+                pcFontSize6: newSize6,
               );
             }
 
-            // Save
             await widget.themeProvider.updateFontSizeSettings(updatedSettings);
 
-            // Close dialog if still mounted
-            if (mounted) {
+            if (context.mounted) {
               Navigator.of(context).pop();
             }
           },
@@ -800,6 +963,122 @@ class _StatCard extends StatelessWidget {
             fontSize: 12,
             color: Colors.grey[600],
           ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ExportDeckWidget extends StatefulWidget {
+  final List<Deck> decks;
+  const _ExportDeckWidget({required this.decks});
+
+  @override
+  State<_ExportDeckWidget> createState() => _ExportDeckWidgetState();
+}
+
+class _ExportDeckWidgetState extends State<_ExportDeckWidget> {
+  Deck? _selectedDeck;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.decks.isNotEmpty) {
+      _selectedDeck = widget.decks.first;
+    }
+  }
+
+  Future<void> _exportDeck() async {
+    if (_selectedDeck == null) return;
+    
+    // Show mapping dialog
+    final exportOrder = await showDialog<List<int>>(
+      context: context,
+      builder: (context) => ExportMappingDialog(deck: _selectedDeck!),
+    );
+
+    if (exportOrder == null) return; // Canceled
+
+    try {
+      final bytes = await ExcelService.exportDeckToExcelBytes(_selectedDeck!, exportOrder: exportOrder);
+      String? dir;
+      try {
+        dir = await FilePicker.platform.getDirectoryPath(
+          dialogTitle: 'Select Directory to Save Excel File',
+        );
+      } catch (e) {
+        // Fallback or ignore if platform doesn't support directory picker
+      }
+      
+      if (dir != null) {
+        final file = File('$dir/Export_${_selectedDeck!.name}.xlsx');
+        await file.writeAsBytes(bytes);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Berhasil diekspor ke: ${file.path}'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        // Just standard saveFile if directory picker returns null or unsupported
+        final savePath = await FilePicker.platform.saveFile(
+          dialogTitle: 'Save Excel File',
+          fileName: 'Export_${_selectedDeck!.name}.xlsx',
+          type: FileType.custom,
+          allowedExtensions: ['xlsx'],
+          bytes: Uint8List.fromList(bytes),
+        );
+        if (savePath != null) {
+          final file = File(savePath);
+          await file.writeAsBytes(bytes);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Berhasil diekspor ke: $savePath'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal mengekspor: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: DropdownButton<Deck>(
+            isExpanded: true,
+            value: _selectedDeck,
+            items: widget.decks.map((d) {
+              return DropdownMenuItem(
+                value: d,
+                child: Text(d.name, overflow: TextOverflow.ellipsis),
+              );
+            }).toList(),
+            onChanged: (val) {
+              if (val != null) setState(() => _selectedDeck = val);
+            },
+          ),
+        ),
+        const SizedBox(width: 8),
+        ElevatedButton.icon(
+          icon: const Icon(Icons.download, size: 18),
+          label: const Text('Export'),
+          onPressed: _exportDeck,
         ),
       ],
     );

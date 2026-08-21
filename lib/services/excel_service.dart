@@ -1,9 +1,19 @@
 import 'dart:io';
-import 'package:excel/excel.dart';
 import 'package:flutter/foundation.dart';
 import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
+import 'package:syncfusion_flutter_xlsio/xlsio.dart' as xlsio;
 import '../models/flashcard_card.dart';
 import '../models/deck.dart';
+
+
+class _ParseDeckParams {
+  final List<int> bytes;
+  final String deckName;
+  final String? fileName;
+  final String? targetSheetName;
+  final List<int>? importOrder;
+  const _ParseDeckParams(this.bytes, this.deckName, this.fileName, this.targetSheetName, this.importOrder);
+}
 
 class FileMetadata {
   final String fileName;
@@ -21,6 +31,40 @@ class FileMetadata {
     required this.columnHeaders,
     required this.previewData,
   });
+
+  FileMetadata applyMapping(List<int> importOrder) {
+    List<String> newHeaders = [];
+    for (int idx in importOrder) {
+      if (idx >= 0 && idx < columnHeaders.length) {
+        newHeaders.add(columnHeaders[idx]);
+      } else {
+        newHeaders.add('Empty Column');
+      }
+    }
+
+    List<Map<String, dynamic>> newPreviewData = [];
+    for (var rowMap in previewData) {
+      List<String> oldColumns = rowMap['columns'] as List<String>? ?? [];
+      List<String> newColumns = [];
+      for (int idx in importOrder) {
+        if (idx >= 0 && idx < oldColumns.length) {
+          newColumns.add(oldColumns[idx]);
+        } else {
+          newColumns.add('');
+        }
+      }
+      newPreviewData.add({'columns': newColumns});
+    }
+
+    return FileMetadata(
+      fileName: fileName,
+      sheetName: sheetName,
+      columnCount: newHeaders.length,
+      totalRows: totalRows,
+      columnHeaders: newHeaders,
+      previewData: newPreviewData,
+    );
+  }
 }
 
 class ExcelService {
@@ -45,101 +89,79 @@ class ExcelService {
     List<int> bytes,
     String deckName, {
     String? fileName,
+    String? targetSheetName,
+    List<int>? importOrder,
   }) async {
-    debugPrint('>>> ExcelService: Parsing deck from bytes (${bytes.length} bytes)...');
-    try {
-      final excel = Excel.decodeBytes(bytes);
-      return _buildDeckFromExcel(excel, deckName);
-    } catch (e) {
-      debugPrint('>>> ExcelService Deck Standard Parse Failed: $e');
-      debugPrint('>>> ExcelService Deck Fallback Parser: Activating...');
-      try {
-        final decoder = SpreadsheetDecoder.decodeBytes(bytes);
-        final deck = _buildDeckFromDecoder(decoder, deckName);
-        debugPrint('>>> ExcelService Deck Fallback Parser: Success!');
-        return deck;
-      } catch (fallbackError) {
-        debugPrint('>>> ExcelService Deck Fallback Parser Failed: $fallbackError');
-        throw Exception(
-          'Gagal menyimpan dataset dari file Excel. Pastikan format .xlsx standar tanpa password/macros.',
-        );
-      }
-    }
-  }
-
-  static Deck _buildDeckFromExcel(Excel excel, String deckName) {
-    final cards = <FlashcardCard>[];
-    List<String> headers = [];
-    int dataColumnCount = 0;
-
-    for (var table in excel.tables.keys) {
-      final sheet = excel.tables[table]!;
-
-      if (sheet.rows.isEmpty) {
-        throw Exception('Excel file is empty');
-      }
-
-      final headerRow = sheet.rows[0];
-      dataColumnCount = headerRow.length.clamp(1, 6);
-
-      for (int i = 0; i < dataColumnCount && i < headerRow.length; i++) {
-        headers.add(headerRow[i]?.value?.toString() ?? 'Column ${i + 1}');
-      }
-
-      for (int i = 1; i < sheet.rows.length; i++) {
-        final row = sheet.rows[i];
-        if (row.isEmpty) continue;
-
-        final col1 = row[0]?.value?.toString();
-        if (col1 == null || col1.trim().isEmpty) continue;
-
-        cards.add(
-          FlashcardCard(
-            col1: col1,
-            col2: dataColumnCount >= 2 && row.length > 1
-                ? row[1]?.value?.toString()
-                : null,
-            col3: dataColumnCount >= 3 && row.length > 2
-                ? row[2]?.value?.toString()
-                : null,
-            col4: dataColumnCount >= 4 && row.length > 3
-                ? row[3]?.value?.toString()
-                : null,
-            col5: dataColumnCount >= 5 && row.length > 4
-                ? row[4]?.value?.toString()
-                : null,
-            col6: dataColumnCount >= 6 && row.length > 5
-                ? row[5]?.value?.toString()
-                : null,
-            columnCount: dataColumnCount,
-          ),
-        );
-      }
-
-      break;
-    }
-
-    if (cards.isEmpty) {
-      throw Exception('No valid data found. Ensure column 1 has text data.');
-    }
-
-    return Deck(
-      name: deckName,
-      columnCount: dataColumnCount,
-      columnHeaders: headers,
-      cards: cards,
+    debugPrint('>>> ExcelService: Parsing deck from bytes (${bytes.length} bytes) in background...');
+    return compute(
+      _parseExcelFromBytesIsolate,
+      _ParseDeckParams(bytes, deckName, fileName, targetSheetName, importOrder),
     );
   }
 
-  static Deck _buildDeckFromDecoder(
-    SpreadsheetDecoder decoder,
-    String deckName,
-  ) {
+  static Deck _parseExcelFromBytesIsolate(_ParseDeckParams params) {
+    try {
+      final decoder = SpreadsheetDecoder.decodeBytes(params.bytes);
+      return _buildDeckFromDecoder(decoder, params.deckName,
+          targetSheetName: params.targetSheetName, importOrder: params.importOrder);
+    } catch (e) {
+      throw Exception(
+        'Gagal menyimpan dataset dari file Excel. Pastikan format .xlsx standar tanpa password/macros.',
+      );
+    }
+  }
+
+  static Future<List<int>> exportDeckToExcelBytes(Deck deck, {List<int>? exportOrder}) async {
+    final workbook = xlsio.Workbook();
+    final sheet = workbook.worksheets[0];
+    sheet.name = 'Sheet1';
+
+    // Default order is 0, 1, 2...
+    final order = exportOrder ?? List.generate(deck.columnCount, (i) => i);
+
+    // Add headers (Syncfusion uses 1-based indexing)
+    int colIndex = 1;
+    for (int index in order) {
+      if (index >= 0 && index < deck.columnHeaders.length) {
+        sheet.getRangeByIndex(1, colIndex).setText(deck.columnHeaders[index]);
+      } else {
+        sheet.getRangeByIndex(1, colIndex).setText('Empty Column');
+      }
+      colIndex++;
+    }
+    sheet.getRangeByIndex(1, colIndex).setText('score');
+
+    // Add rows
+    for (int i = 0; i < deck.cards.length; i++) {
+      final card = deck.cards[i];
+      final cols = card.allColumns;
+      
+      int cIndex = 1;
+      for (int index in order) {
+        if (index >= 0 && index < cols.length) {
+          sheet.getRangeByIndex(i + 2, cIndex).setText(cols[index]);
+        } else {
+          sheet.getRangeByIndex(i + 2, cIndex).setText('');
+        }
+        cIndex++;
+      }
+      
+      sheet.getRangeByIndex(i + 2, cIndex).setNumber(card.score.toDouble());
+    }
+
+    final List<int> bytes = workbook.saveAsStream();
+    workbook.dispose();
+    return bytes;
+  }
+
+  static Deck _buildDeckFromDecoder(SpreadsheetDecoder decoder, String deckName, {String? targetSheetName, List<int>? importOrder}) {
     final cards = <FlashcardCard>[];
     List<String> headers = [];
     int dataColumnCount = 0;
 
     for (var sheetName in decoder.tables.keys) {
+      if (targetSheetName != null && sheetName != targetSheetName) continue;
+      
       final table = decoder.tables[sheetName]!;
 
       if (table.rows.isEmpty) {
@@ -147,28 +169,78 @@ class ExcelService {
       }
 
       final headerRow = table.rows[0];
-      dataColumnCount = headerRow.length.clamp(1, 6);
+      int scoreColumnIndex = -1;
+      for (int i = 0; i < headerRow.length; i++) {
+        final headerValue = headerRow[i]?.toString().toLowerCase();
+        if (headerValue == 'score' || headerValue == '_appmeta_score') {
+          scoreColumnIndex = i;
+          break;
+        }
+      }
 
-      for (int i = 0; i < dataColumnCount && i < headerRow.length; i++) {
-        headers.add(headerRow[i]?.toString() ?? 'Column ${i + 1}');
+      List<String> rawHeaders = [];
+      for (int i = 0; i < headerRow.length; i++) {
+        if (i == scoreColumnIndex) continue;
+        rawHeaders.add(headerRow[i]?.toString() ?? 'Column ${rawHeaders.length + 1}');
+      }
+      
+      dataColumnCount = rawHeaders.length;
+
+      // Apply importOrder to headers
+      if (importOrder != null) {
+        for (int idx in importOrder) {
+          if (idx >= 0 && idx < rawHeaders.length) {
+            headers.add(rawHeaders[idx]);
+          } else {
+            headers.add('Empty Column');
+          }
+        }
+      } else {
+        headers = rawHeaders;
       }
 
       for (int i = 1; i < table.rows.length; i++) {
         final row = table.rows[i];
         if (row.isEmpty) continue;
 
-        final col1 = row[0]?.toString();
-        if (col1 == null || col1.trim().isEmpty) continue;
+        List<String> rawColumns = [];
+        for (int j = 0; j < row.length; j++) {
+          if (j == scoreColumnIndex) continue;
+          rawColumns.add(row[j]?.toString() ?? '');
+        }
+
+        // Apply importOrder to row columns
+        List<String> cardColumns = [];
+        if (importOrder != null) {
+          for (int idx in importOrder) {
+            if (idx >= 0 && idx < rawColumns.length) {
+              cardColumns.add(rawColumns[idx]);
+            } else {
+              cardColumns.add('');
+            }
+          }
+        } else {
+          cardColumns = rawColumns;
+        }
+
+        // Pad with empty strings if row is shorter than expected data columns
+        while (cardColumns.length < dataColumnCount) {
+          cardColumns.add('');
+        }
+        
+        // Ensure at least col1 has data
+        if (cardColumns.isEmpty || cardColumns[0].trim().isEmpty) continue;
+
+        int score = 0;
+        if (scoreColumnIndex != -1 && scoreColumnIndex < row.length) {
+          final scoreValue = row[scoreColumnIndex]?.toString();
+          score = int.tryParse(scoreValue ?? '0') ?? 0;
+        }
 
         cards.add(
           FlashcardCard(
-            col1: col1,
-            col2: dataColumnCount >= 2 && row.length > 1 ? row[1]?.toString() : null,
-            col3: dataColumnCount >= 3 && row.length > 2 ? row[2]?.toString() : null,
-            col4: dataColumnCount >= 4 && row.length > 3 ? row[3]?.toString() : null,
-            col5: dataColumnCount >= 5 && row.length > 4 ? row[4]?.toString() : null,
-            col6: dataColumnCount >= 6 && row.length > 5 ? row[5]?.toString() : null,
-            columnCount: dataColumnCount,
+            columns: cardColumns,
+            score: score,
           ),
         );
       }
@@ -195,135 +267,153 @@ class ExcelService {
     return getFileMetadataFromBytes(bytes, fileName);
   }
 
-  static Future<FileMetadata> getFileMetadataFromBytes(
-    List<int> bytes,
-    String fileName,
-  ) async {
+  static Future<List<int>?> attemptPythonRepair(String filePath) async {
     try {
-      debugPrint('>>> ExcelService: Decoding Excel bytes (${bytes.length} bytes)...');
-      final excel = Excel.decodeBytes(bytes);
-      debugPrint('>>> ExcelService: Decoded successfully');
+      debugPrint('>>> ExcelService: Attempting Python repair for broken Excel...');
+      final tempDir = Directory.systemTemp;
+      final tempOut = '${tempDir.path}${Platform.pathSeparator}repaired_excel_${DateTime.now().millisecondsSinceEpoch}.xlsx';
+      
+      final script = '''
+import pandas as pd
+import sys
 
-      for (var table in excel.tables.keys) {
-        final sheetName = table.toString();
-        debugPrint('>>> ExcelService: Processing sheet: $sheetName');
-        final sheet = excel.tables[table]!;
+input_file = sys.argv[1]
+output_file = sys.argv[2]
 
-        if (sheet.rows.isEmpty) {
-          debugPrint('>>> ExcelService: Sheet $sheetName is empty, skipping');
-          continue;
+try:
+    xls = pd.ExcelFile(input_file)
+    with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
+        for sheet_name in xls.sheet_names:
+            df = pd.read_excel(xls, sheet_name=sheet_name)
+            df = df.fillna('')
+            df.to_excel(writer, sheet_name=sheet_name, index=False)
+    sys.exit(0)
+except Exception as e:
+    sys.exit(1)
+''';
+
+      final scriptFile = File('${tempDir.path}${Platform.pathSeparator}repair.py');
+      await scriptFile.writeAsString(script);
+      
+      final result = await Process.run('python', [scriptFile.path, filePath, tempOut]);
+      
+      if (result.exitCode == 0) {
+        final repairedFile = File(tempOut);
+        if (await repairedFile.exists()) {
+          debugPrint('>>> ExcelService: Python repair successful!');
+          return await repairedFile.readAsBytes();
         }
-
-        final headerRow = sheet.rows[0];
-        final columnCount = headerRow.length.clamp(1, 6);
-        List<String> headers = [];
-
-        for (int i = 0; i < columnCount && i < headerRow.length; i++) {
-          headers.add(headerRow[i]?.value?.toString() ?? 'Column ${i + 1}');
-        }
-
-        List<Map<String, dynamic>> allRows = [];
-
-        for (int i = 1; i < sheet.rows.length; i++) {
-          final row = sheet.rows[i];
-          if (row.isNotEmpty && row[0]?.value != null) {
-            final col1 = row[0]?.value?.toString();
-            if (col1 != null && col1.trim().isNotEmpty) {
-              Map<String, dynamic> rowData = {'col1': col1};
-              for (int j = 1; j < columnCount && j < row.length; j++) {
-                rowData['col${j + 1}'] = row[j]?.value?.toString();
-              }
-              allRows.add(rowData);
-            }
-          }
-        }
-
-        if (allRows.isNotEmpty) {
-          final previewData = allRows.length <= 32
-              ? allRows
-              : [
-                  ...allRows.take(29),
-                  ...allRows.skip(allRows.length - 3),
-                ];
-
-          return FileMetadata(
-            fileName: _sanitizeFileName(fileName),
-            sheetName: sheetName,
-            columnCount: columnCount,
-            totalRows: allRows.length,
-            columnHeaders: headers,
-            previewData: previewData,
-          );
-        }
+      } else {
+        debugPrint('>>> ExcelService: Python repair failed. Exit code: ${result.exitCode}');
+        debugPrint(result.stderr.toString());
       }
-
-      throw Exception('No valid data found');
     } catch (e) {
-      debugPrint('>>> ExcelService Standard Parse Failed: $e');
-      rethrow;
+      debugPrint('>>> ExcelService: Failed to run python repair: $e');
     }
+    return null;
   }
 
-  static Future<FileMetadata> getFileMetadataFallback(
-    List<int> bytes,
-    String fileName,
-  ) async {
-    debugPrint('>>> Fallback Parser: Activating...');
+  static Future<List<String>> getAvailableSheets(List<int> bytes) async {
+    return compute(_getAvailableSheetsSync, bytes);
+  }
+
+  // --- Isolate helper: list sheets ---
+  static List<String> _getAvailableSheetsSync(List<int> bytes) {
+    List<String> validSheets = [];
     try {
       final decoder = SpreadsheetDecoder.decodeBytes(bytes);
-
-      for (var sheetName in decoder.tables.keys) {
-        final table = decoder.tables[sheetName]!;
-        if (table.rows.isEmpty) {
-          debugPrint('>>> Fallback Parser: Sheet $sheetName is empty, skipping');
-          continue;
+      for (var table in decoder.tables.keys) {
+        if (decoder.tables[table]!.rows.isNotEmpty) {
+          validSheets.add(table.toString());
         }
+      }
+      if (validSheets.isNotEmpty) return validSheets;
+    } catch (_) {}
+    return validSheets;
+  }
 
-        final headerRow = table.rows[0];
-        final columnCount = headerRow.length.clamp(1, 6);
-        List<String> headers = [];
-        for (int i = 0; i < columnCount && i < headerRow.length; i++) {
-          headers.add(headerRow[i]?.toString() ?? 'Column ${i + 1}');
-        }
+  // --- Isolate helper: metadata ---
+  static FileMetadata _getFileMetadataSync(Map<String, dynamic> args) {
+    final bytes = args['bytes'] as List<int>;
+    final fileName = args['fileName'] as String;
+    final targetSheetName = args['targetSheetName'] as String?;
 
-        List<Map<String, dynamic>> allRows = [];
-        for (int i = 1; i < table.rows.length; i++) {
-          final row = table.rows[i];
-          if (row.isNotEmpty) {
-            final col1 = row[0]?.toString();
-            if (col1 != null && col1.trim().isNotEmpty) {
-              Map<String, dynamic> rowData = {'col1': col1};
-              for (int j = 1; j < columnCount && j < row.length; j++) {
-                rowData['col${j + 1}'] = row[j]?.toString();
-              }
-              allRows.add(rowData);
-            }
-          }
-        }
+    final decoder = SpreadsheetDecoder.decodeBytes(bytes);
 
-        if (allRows.isNotEmpty) {
-          final previewData = allRows.length <= 32
-              ? allRows
-              : [
-                  ...allRows.take(29),
-                  ...allRows.skip(allRows.length - 3),
-                ];
+    for (var sheetName in decoder.tables.keys) {
+      if (targetSheetName != null && sheetName != targetSheetName) continue;
 
-          debugPrint('>>> Fallback Parser: Success! Found ${allRows.length} rows');
-          return FileMetadata(
-            fileName: _sanitizeFileName(fileName),
-            sheetName: sheetName,
-            columnCount: columnCount,
-            totalRows: allRows.length,
-            columnHeaders: headers,
-            previewData: previewData,
-          );
+      final table = decoder.tables[sheetName]!;
+      if (table.rows.isEmpty) continue;
+
+      final headerRow = table.rows[0];
+
+      int scoreColumnIndex = -1;
+      for (int i = 0; i < headerRow.length; i++) {
+        final headerValue = headerRow[i]?.toString().toLowerCase();
+        if (headerValue == 'score' || headerValue == '_appmeta_score') {
+          scoreColumnIndex = i;
+          break;
         }
       }
 
-      throw Exception('Fallback also found no valid data');
+      final columnCount = scoreColumnIndex != -1 ? headerRow.length - 1 : headerRow.length;
+      List<String> headers = [];
+      for (int i = 0; i < headerRow.length; i++) {
+        if (i == scoreColumnIndex) continue;
+        headers.add(headerRow[i]?.toString() ?? 'Column ${headers.length + 1}');
+      }
+
+      List<Map<String, dynamic>> allRows = [];
+      for (int i = 1; i < table.rows.length; i++) {
+        final row = table.rows[i];
+        if (row.isNotEmpty) {
+          List<String> rowColumns = [];
+          for (int j = 0; j < row.length; j++) {
+            if (j == scoreColumnIndex) continue;
+            rowColumns.add(row[j]?.toString() ?? '');
+          }
+          if (rowColumns.isNotEmpty && rowColumns[0].trim().isNotEmpty) {
+            allRows.add({'columns': rowColumns});
+          }
+        }
+      }
+
+      if (allRows.isNotEmpty) {
+        final previewData = allRows.length <= 32
+            ? allRows
+            : [
+                ...allRows.take(29),
+                ...allRows.skip(allRows.length - 3),
+              ];
+        return FileMetadata(
+          fileName: _sanitizeFileName(fileName),
+          sheetName: sheetName,
+          columnCount: columnCount,
+          totalRows: allRows.length,
+          columnHeaders: headers,
+          previewData: previewData,
+        );
+      }
+    }
+
+    throw Exception('No valid data found');
+  }
+
+  static Future<FileMetadata> getFileMetadataFromBytes(
+    List<int> bytes,
+    String fileName, {
+    String? targetSheetName,
+  }) async {
+    debugPrint('>>> ExcelService: Decoding Excel bytes (${bytes.length} bytes) via isolate...');
+    try {
+      return await compute(_getFileMetadataSync, {
+        'bytes': bytes,
+        'fileName': fileName,
+        'targetSheetName': targetSheetName,
+      });
     } catch (e) {
-      debugPrint('>>> Fallback Parser Failed: $e');
+      debugPrint('>>> ExcelService Parse Failed: $e');
       throw Exception(
         'Gagal membaca file. Pastikan format .xlsx standar tanpa password/macros.',
       );
