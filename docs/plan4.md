@@ -187,7 +187,7 @@ Untuk setiap dataset/file, simpan seluruh konfigurasi yang relevan, termasuk:
 
 Ketika user berpindah dataset, load konfigurasi dataset tersebut.
 
-Ketika user kembali ke dataset sebelumnya, restore konfigurasi terakhir.
+Ketika user kembali ke dataset sebelumnya, restore konfigurasi terakhir.1
 
 ---
 
