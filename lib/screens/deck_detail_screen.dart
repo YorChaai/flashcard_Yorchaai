@@ -6,8 +6,8 @@ import '../providers/theme_provider.dart';
 import '../models/order_mode.dart';
 import '../models/deck.dart';
 import '../models/font_size_settings.dart';
-import '../models/sort_mode.dart';
 import '../models/flashcard_card.dart';
+import '../services/storage_service.dart';
 import 'flashcard_screen.dart';
 import 'learning_preview_screen.dart';
 
@@ -20,7 +20,6 @@ class DeckDetailScreen extends StatefulWidget {
 
 class _DeckDetailScreenState extends State<DeckDetailScreen> {
   OrderMode _selectedMode = OrderMode.normal;
-  SortMode _sortMode = SortMode.original;
   late final TextEditingController _fromController;
   late final TextEditingController _toController;
   bool _rangeInitialized = false;
@@ -43,10 +42,13 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!_rangeInitialized) {
-      final deck = context.read<DeckProvider>().selectedDeck;
+      final provider = context.read<DeckProvider>();
+      final deck = provider.selectedDeck;
       if (deck != null) {
-        _fromController.text = (deck.lastLearningRangeStart ?? 1).toString();
-        _toController.text = (deck.lastLearningRangeEnd ?? deck.totalCards).toString();
+        final config = provider.getDeckConfig(deck.id);
+        _fromController.text = (config.rangeStart ?? deck.lastLearningRangeStart ?? 1).toString();
+        _toController.text = (config.rangeEnd ?? deck.lastLearningRangeEnd ?? deck.totalCards).toString();
+        _selectedMode = config.orderMode;
         _rangeInitialized = true;
       }
     }
@@ -71,7 +73,12 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(deck.name),
+        title: Text(
+          deck.name,
+          softWrap: true,
+          maxLines: 2,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
       ),
       floatingActionButton: deck.id == 'custom_mode_deck_default'
           ? FloatingActionButton(
@@ -164,8 +171,9 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
 
             const SizedBox(height: 24),
 
+            // Active Dataset Selector
             const Text(
-              'Sort By',
+              'Active Dataset',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -176,27 +184,31 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 child: DropdownButtonHideUnderline(
-                  child: DropdownButton<SortMode>(
+                  child: DropdownButton<Deck>(
                     isExpanded: true,
-                    value: _sortMode,
-                    items: const [
-                      DropdownMenuItem(
-                        value: SortMode.original,
-                        child: Text('Original Order (As in File)'),
-                      ),
-                      DropdownMenuItem(
-                        value: SortMode.lowestScore,
-                        child: Text('Lowest Score First (Paling Tidak Tahu)'),
-                      ),
-                      DropdownMenuItem(
-                        value: SortMode.highestScore,
-                        child: Text('Highest Score First (Paling Banyak Tahu)'),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
+                    value: context.watch<DeckProvider>().decks.any((d) => d.id == deck.id)
+                        ? context.watch<DeckProvider>().decks.firstWhere((d) => d.id == deck.id)
+                        : deck,
+                    items: context.watch<DeckProvider>().decks.map((d) {
+                      return DropdownMenuItem(
+                        value: d,
+                        child: Text(
+                          '${d.name} (${d.totalCards} cards)',
+                          softWrap: true,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (newDeck) {
+                      if (newDeck != null && newDeck.id != deck.id) {
+                        final provider = context.read<DeckProvider>();
+                        provider.selectDeck(newDeck);
+                        StorageService().setLastSelectedDeckId(newDeck.id);
+                        final config = provider.getDeckConfig(newDeck.id);
                         setState(() {
-                          _sortMode = value;
+                          _fromController.text = (config.rangeStart ?? newDeck.lastLearningRangeStart ?? 1).toString();
+                          _toController.text = (config.rangeEnd ?? newDeck.lastLearningRangeEnd ?? newDeck.totalCards).toString();
+                          _selectedMode = config.orderMode;
                         });
                       }
                     },
@@ -204,7 +216,7 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                 ),
               ),
             ),
-            
+
             const SizedBox(height: 24),
 
             const Text(
@@ -222,8 +234,11 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      runSpacing: 8,
                       children: [
                         Text(
                           'Available data: 1 - ${deck.totalCards}',
@@ -285,7 +300,6 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
 
             const SizedBox(height: 24),
 
-            // Order Mode
             const Text(
               'Order Mode',
               style: TextStyle(
@@ -317,6 +331,11 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                       ),
                       title: const Text('Normal'),
                       subtitle: const Text('Original order (as in Excel)'),
+                      onTap: () {
+                        setState(() {
+                          _selectedMode = OrderMode.normal;
+                        });
+                      },
                     ),
                     ListTile(
                       leading: Radio<OrderMode>(
@@ -335,6 +354,11 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                       ),
                       title: const Text('Reverse'),
                       subtitle: const Text('Reversed order'),
+                      onTap: () {
+                        setState(() {
+                          _selectedMode = OrderMode.reverse;
+                        });
+                      },
                     ),
                     ListTile(
                       leading: Radio<OrderMode>(
@@ -353,19 +377,25 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                       ),
                       title: const Text('Random'),
                       subtitle: const Text('Shuffled order'),
+                      onTap: () {
+                        setState(() {
+                          _selectedMode = OrderMode.random;
+                        });
+                      },
                     ),
                   ],
                 ),
               ),
             ),
 
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
 
-            // Start Button
             ElevatedButton(
               onPressed: _startLearning,
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
+                backgroundColor: Theme.of(context).primaryColor,
+                foregroundColor: Colors.white,
               ),
               child: const Text(
                 'Start Learning',
@@ -378,31 +408,14 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
     );
   }
 
-  List<FlashcardCard> _getSortedCards(Deck deck) {
-    List<FlashcardCard> sortedList = List.from(deck.cards);
-    switch (_sortMode) {
-      case SortMode.lowestScore:
-        sortedList.sort((a, b) => a.score.compareTo(b.score));
-        break;
-      case SortMode.highestScore:
-        sortedList.sort((a, b) => b.score.compareTo(a.score));
-        break;
-      case SortMode.original:
-        break;
-    }
-    return sortedList;
-  }
-
   void _startLearning() {
-    final deck = context.read<DeckProvider>().selectedDeck;
+    final provider = context.read<DeckProvider>();
+    final deck = provider.selectedDeck;
     if (deck == null || deck.cards.isEmpty) return;
-    
-    final sortedCards = _getSortedCards(deck);
 
     int from = int.tryParse(_fromController.text) ?? 1;
     int to = int.tryParse(_toController.text) ?? deck.totalCards;
 
-    // Auto-clamp values
     if (from < 1) from = 1;
     if (from > deck.totalCards) from = deck.totalCards;
     
@@ -415,25 +428,26 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
       to = temp;
     }
     
-    // Update UI to reflect clamped values
     _fromController.text = from.toString();
     _toController.text = to.toString();
 
-    final selectedCards = sortedCards.sublist(from - 1, to);
-    if (selectedCards.isEmpty) {
-      _showRangeError('Tidak ada data pada range yang dipilih.');
+    var config = provider.getDeckConfig(deck.id);
+    config = config.copyWith(
+      rangeStart: from,
+      rangeEnd: to,
+      orderMode: _selectedMode,
+    );
+    provider.updateDeckConfig(config);
+
+    final processedCards = provider.getProcessedCards(deck, config, applyOrderMode: true);
+    if (processedCards.isEmpty) {
+      _showRangeError('Tidak ada data pada range / filter yang dipilih.');
       return;
     }
 
-    final updatedDeck = deck.copyWith(
-      lastLearningRangeStart: from,
-      lastLearningRangeEnd: to,
-    );
-    context.read<DeckProvider>().updateDeck(updatedDeck);
-
     context.read<LearningSessionProvider>().startSession(
-          selectedCards,
-          _selectedMode,
+          processedCards,
+          OrderMode.normal,
         );
 
     Navigator.push(
@@ -447,13 +461,10 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
 
   void _previewLearning(Deck deck) {
     if (deck.cards.isEmpty) return;
-    
-    final sortedCards = _getSortedCards(deck);
 
     int from = int.tryParse(_fromController.text) ?? 1;
     int to = int.tryParse(_toController.text) ?? deck.totalCards;
 
-    // Auto-clamp values
     if (from < 1) from = 1;
     if (from > deck.totalCards) from = deck.totalCards;
     
@@ -466,31 +477,35 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
       to = temp;
     }
 
-    // Update UI to reflect clamped values
     _fromController.text = from.toString();
     _toController.text = to.toString();
 
-    final selectedCards = sortedCards.sublist(from - 1, to);
-    if (selectedCards.isEmpty) {
-      _showRangeError('Tidak ada data pada range yang dipilih.');
-      return;
-    }
-
-    final updatedDeck = deck.copyWith(
-      lastLearningRangeStart: from,
-      lastLearningRangeEnd: to,
+    final provider = context.read<DeckProvider>();
+    var config = provider.getDeckConfig(deck.id);
+    config = config.copyWith(
+      rangeStart: from,
+      rangeEnd: to,
+      orderMode: _selectedMode,
     );
-    context.read<DeckProvider>().updateDeck(updatedDeck);
+    provider.updateDeckConfig(config);
 
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => LearningPreviewScreen(
-          previewCards: selectedCards,
+          previewCards: deck.cards,
           columnHeaders: deck.columnHeaders,
+          deck: deck,
         ),
       ),
-    );
+    ).then((_) {
+      final updatedConfig = provider.getDeckConfig(deck.id);
+      setState(() {
+        _fromController.text = (updatedConfig.rangeStart ?? 1).toString();
+        _toController.text = (updatedConfig.rangeEnd ?? deck.totalCards).toString();
+        _selectedMode = updatedConfig.orderMode;
+      });
+    });
   }
 
   void _showRangeError(String message) {
@@ -503,16 +518,13 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
   }
 
   void _showColumnEditDialog(BuildContext context, Deck deck) {
-    // State untuk urutan kolom saat ini
     final columnOrder = List<int>.generate(deck.columnCount, (i) => i);
     final columnHeaders = List<String>.from(deck.columnHeaders);
     int visibleColumnCount = deck.visibleColumnCount.clamp(1, deck.columnCount);
 
-    // Get global settings (Settings = source of truth)
     final themeProvider = context.read<ThemeProvider>();
     final fontSizeSettings = themeProvider.fontSizeSettings;
 
-    // Helper functions
     String formatFontSize(double size) {
       if (size == size.toInt()) {
         return size.toInt().toString();
@@ -523,7 +535,7 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
     double? parseFontSize(String input) {
       final intValue = int.tryParse(input);
       if (intValue != null) return intValue.toDouble();
-      return double.tryParse(input); // Returns null if invalid
+      return double.tryParse(input);
     }
 
     final fontSize1Controller = TextEditingController(
@@ -543,182 +555,146 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
-          void moveColumn(int index, bool moveUp) {
-            setDialogState(() {
-              final targetIndex = moveUp ? index - 1 : index + 1;
-              if (targetIndex >= 0 && targetIndex < columnOrder.length) {
-                // Swap positions
-                final temp = columnOrder[index];
-                columnOrder[index] = columnOrder[targetIndex];
-                columnOrder[targetIndex] = temp;
-
-                // Swap headers untuk display
-                final tempHeader = columnHeaders[index];
-                columnHeaders[index] = columnHeaders[targetIndex];
-                columnHeaders[targetIndex] = tempHeader;
-              }
-            });
-          }
-
           return AlertDialog(
             title: const Text('Column Settings'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Section: Column Order
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Column Order',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).brightness == Brightness.dark 
-                              ? Colors.grey[800] 
-                              : Colors.grey[200],
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: Theme.of(context).brightness == Brightness.dark 
-                                ? Colors.grey[700]! 
-                                : Colors.grey[300]!,
+            content: SizedBox(
+              width: MediaQuery.of(context).size.width.clamp(280.0, 440.0),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        const Text(
+                          'Column Order',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text('Show: ', 
-                                style: TextStyle(
-                                  fontSize: 12, 
-                                  color: Theme.of(context).brightness == Brightness.dark 
-                                      ? Colors.white70 
-                                      : Colors.black87
-                                )),
-                            DropdownButtonHideUnderline(
-                              child: DropdownButton<int>(
-                                dropdownColor: Theme.of(context).brightness == Brightness.dark 
-                                    ? Colors.grey[800] 
-                                    : Colors.white,
-                                value: visibleColumnCount,
-                                isDense: true,
-                                iconSize: 18,
-                                iconEnabledColor: Theme.of(context).brightness == Brightness.dark 
-                                    ? Colors.white 
-                                    : Colors.black,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: Theme.of(context).brightness == Brightness.dark 
-                                      ? Colors.white 
-                                      : Colors.black,
-                                ),
-                                items: List.generate(deck.columnCount, (i) => i + 1).map((val) {
-                                  return DropdownMenuItem(value: val, child: Text('$val'));
-                                }).toList(),
-                                onChanged: (val) {
-                                  if (val != null) {
-                                    setDialogState(() {
-                                      visibleColumnCount = val;
-                                    });
-                                  }
-                                },
-                              ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).brightness == Brightness.dark 
+                                ? Colors.grey[800] 
+                                : Colors.grey[200],
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: Theme.of(context).brightness == Brightness.dark 
+                                  ? Colors.grey[700]! 
+                                  : Colors.grey[300]!,
                             ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey[300]!),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Column(
-                      children: List.generate(
-                        columnOrder.length,
-                        (index) => Container(
-                          margin: EdgeInsets.only(
-                            bottom: index < columnOrder.length - 1 ? 8 : 0,
                           ),
                           child: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              // Column number
-                              Container(
-                                width: 28,
-                                height: 28,
-                                decoration: BoxDecoration(
-                                  color: Theme.of(context).primaryColor,
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    '${index + 1}',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                    ),
+                              Text('Show: ', 
+                                  style: TextStyle(
+                                    fontSize: 12, 
+                                    color: Theme.of(context).brightness == Brightness.dark 
+                                        ? Colors.white70 
+                                        : Colors.black87
+                                  )),
+                              DropdownButtonHideUnderline(
+                                child: DropdownButton<int>(
+                                  dropdownColor: Theme.of(context).brightness == Brightness.dark 
+                                      ? Colors.grey[800] 
+                                      : Colors.white,
+                                  value: visibleColumnCount,
+                                  isDense: true,
+                                  iconSize: 18,
+                                  iconEnabledColor: Theme.of(context).brightness == Brightness.dark 
+                                      ? Colors.white 
+                                      : Colors.black,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: Theme.of(context).brightness == Brightness.dark 
+                                        ? Colors.white 
+                                        : Colors.black,
                                   ),
+                                  items: List.generate(deck.columnCount, (i) => i + 1).map((val) {
+                                    return DropdownMenuItem(value: val, child: Text('$val'));
+                                  }).toList(),
+                                  onChanged: (val) {
+                                    if (val != null) {
+                                      setDialogState(() {
+                                        visibleColumnCount = val;
+                                      });
+                                    }
+                                  },
                                 ),
-                              ),
-                              const SizedBox(width: 8),
-                              // Column header name
-                              Expanded(
-                                child: Text(
-                                  columnHeaders[index],
-                                  style: const TextStyle(fontSize: 14),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              // Up button
-                              IconButton(
-                                icon: Icon(
-                                  Icons.arrow_upward,
-                                  size: 20,
-                                  color: index == 0
-                                      ? Colors.grey[600]
-                                      : Theme.of(context).primaryColor,
-                                ),
-                                onPressed: index == 0
-                                    ? null
-                                    : () => moveColumn(index, true),
-                                tooltip: 'Move Up',
-                              ),
-                              // Down button
-                              IconButton(
-                                icon: Icon(
-                                  Icons.arrow_downward,
-                                  size: 20,
-                                  color: index == columnOrder.length - 1
-                                      ? Colors.grey[600]
-                                      : Theme.of(context).primaryColor,
-                                ),
-                                onPressed: index == columnOrder.length - 1
-                                    ? null
-                                    : () => moveColumn(index, false),
-                                tooltip: 'Move Down',
                               ),
                             ],
                           ),
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      height: (columnOrder.length * 52.0).clamp(160.0, 280.0),
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: Theme.of(context).brightness == Brightness.dark
+                              ? Colors.grey[700]!
+                              : Colors.grey[300]!,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        color: Theme.of(context).cardColor,
+                      ),
+                      child: ReorderableListView.builder(
+                        itemCount: columnOrder.length,
+                        onReorderItem: (oldIndex, newIndex) {
+                          setDialogState(() {
+                            final itemOrder = columnOrder.removeAt(oldIndex);
+                            columnOrder.insert(newIndex, itemOrder);
+
+                            final itemHeader = columnHeaders.removeAt(oldIndex);
+                            columnHeaders.insert(newIndex, itemHeader);
+                          });
+                        },
+                        itemBuilder: (context, idx) {
+                          final headerName = columnHeaders[idx];
+                          return ListTile(
+                            key: ValueKey('column_order_${columnOrder[idx]}'),
+                            dense: true,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                            leading: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                '#${idx + 1}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                  color: Colors.blueAccent,
+                                ),
+                              ),
+                            ),
+                            title: Text(
+                              headerName,
+                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                            ),
+                            trailing: const Icon(Icons.drag_handle, color: Colors.grey),
+                          );
+                        },
                       ),
                     ),
-                  ),
 
-                  const SizedBox(height: 24),
+                    const SizedBox(height: 24),
 
-                  // Section: Font Size Settings
-                  Row(
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 8,
                     children: [
                       const Text(
                         'Font Size Settings',
@@ -727,7 +703,6 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(
@@ -804,7 +779,8 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                 ],
               ),
             ),
-            actions: [
+          ),
+          actions: [
               TextButton(
                 onPressed: () {
                   Navigator.pop(context);
@@ -961,7 +937,6 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
 
                     Deck targetDeck = currentDeck;
                     bool foundAny = false;
-                    int addedCount = 0;
 
                     for (final deck in availableDecks) {
                       FlashcardCard? matchInDeck;
@@ -974,7 +949,6 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
 
                       if (matchInDeck != null) {
                         foundAny = true;
-                        addedCount++;
                         
                         List<String> newColumns = [kata, arti, deck.name]; // Source file di kolom ke-3
                         newColumns.addAll(matchInDeck.columns);
@@ -1010,7 +984,6 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
 
                     // Jika tidak ditemukan di file manapun
                     if (!foundAny) {
-                        addedCount = 1;
                         List<String> newColumns = [kata, arti, 'Manual/Custom']; // Pastikan ada kolom ke-3
                         
                         int requiredCols = newColumns.length;

@@ -2,11 +2,13 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/deck.dart';
+import '../models/deck_config.dart';
 
 class StorageService {
   static const String _decksKey = 'yorflashcard_decks';
   static const String _refDeckKey = 'yorflashcard_ref_deck_id';
   static const String _lastDeckKey = 'yorflashcard_last_deck_id';
+  static const String _deckConfigsPrefix = 'yorflashcard_deck_config_';
   static SharedPreferences? _prefs;
 
   Future<SharedPreferences> _getPrefs() async {
@@ -40,6 +42,30 @@ class StorageService {
     } catch (e) {
       debugPrint('ERROR: Failed to save decks: $e');
       rethrow;
+    }
+  }
+
+  Future<DeckConfig> getDeckConfig(String deckId) async {
+    try {
+      final prefs = await _getPrefs();
+      final jsonString = prefs.getString('$_deckConfigsPrefix$deckId');
+      if (jsonString != null && jsonString.isNotEmpty) {
+        final Map<String, dynamic> jsonMap = jsonDecode(jsonString);
+        return DeckConfig.fromJson(jsonMap);
+      }
+    } catch (e) {
+      debugPrint('WARNING: Failed to load deck config for $deckId: $e');
+    }
+    return DeckConfig(deckId: deckId);
+  }
+
+  Future<void> saveDeckConfig(DeckConfig config) async {
+    try {
+      final prefs = await _getPrefs();
+      final jsonString = jsonEncode(config.toJson());
+      await prefs.setString('$_deckConfigsPrefix${config.deckId}', jsonString);
+    } catch (e) {
+      debugPrint('ERROR: Failed to save deck config for ${config.deckId}: $e');
     }
   }
 

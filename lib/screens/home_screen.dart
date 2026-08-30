@@ -154,111 +154,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
                   const SizedBox(height: 24),
 
-                  // Dataset Selector
-                  if (decks.isNotEmpty) ...[
-                    Card(
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? Colors.grey[850]
-                          : Theme.of(context).cardColor,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        side: Theme.of(context).brightness == Brightness.dark
-                            ? BorderSide(color: Colors.grey[700]!, width: 1)
-                            : BorderSide.none,
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Active Dataset',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            DropdownButtonFormField<Deck>(
-                              isExpanded: true,
-                              initialValue: _selectedDataset,
-                              decoration: InputDecoration(
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                filled: true,
-                                fillColor: Theme.of(context).brightness == Brightness.dark
-                                    ? Colors.grey[800]
-                                    : Theme.of(context).cardColor,
-                              ),
-                              items: decks.map((deck) {
-                                return DropdownMenuItem(
-                                  value: deck,
-                                  child: Text(
-                                    '${deck.name} (${deck.totalCards} cards)',
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                );
-                              }).toList(),
-                              onChanged: (value) {
-                                if (value != null) {
-                                  setState(() {
-                                    _selectedDataset = value;
-                                  });
-                                  StorageService().setLastSelectedDeckId(value.id);
-                                }
-                              },
-                            ),
-                            if (_selectedDataset != null) ...[
-                              const SizedBox(height: 12),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      'Columns: ${_selectedDataset!.columnCount}',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.grey[600],
-                                      ),
-                                    ),
-                                  ),
-                                  TextButton.icon(
-                                    onPressed: () {
-                                      deckProvider.selectDeck(_selectedDataset!);
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) => const DeckDetailScreen(),
-                                        ),
-                                      );
-                                    },
-                                    icon: const Icon(Icons.edit, size: 16),
-                                    label: const Text('Edit'),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-
                   // Main Action Button
                   ElevatedButton.icon(
                     onPressed: decks.isNotEmpty
                         ? () {
-                            if (_selectedDataset != null) {
-                              deckProvider.selectDeck(_selectedDataset!);
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => const DeckDetailScreen(),
-                                ),
-                              );
-                            }
+                            final targetDeck = _selectedDataset ?? deckProvider.selectedDeck ?? decks.first;
+                            deckProvider.selectDeck(targetDeck);
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const DeckDetailScreen(),
+                              ),
+                            );
                           }
                         : null,
                     icon: const Icon(Icons.play_arrow, size: 24, color: Colors.white),

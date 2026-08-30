@@ -5,12 +5,14 @@ class FlashcardCard {
   final List<String> columns;
   final bool known;
   final int score;
+  final int? originalIndex;
 
   FlashcardCard({
     String? id,
     required this.columns,
     this.known = false,
     this.score = 0,
+    this.originalIndex,
   }) : id = id ?? const Uuid().v4();
 
   FlashcardCard copyWith({
@@ -18,12 +20,14 @@ class FlashcardCard {
     List<String>? columns,
     bool? known,
     int? score,
+    int? originalIndex,
   }) {
     return FlashcardCard(
       id: id ?? this.id,
       columns: columns ?? List.from(this.columns),
       known: known ?? this.known,
       score: score ?? this.score,
+      originalIndex: originalIndex ?? this.originalIndex,
     );
   }
 
@@ -33,6 +37,7 @@ class FlashcardCard {
       'columns': columns,
       'known': known,
       'score': score,
+      'originalIndex': originalIndex,
       // Include columnCount for backward compatibility with old code if needed
       'columnCount': columns.length,
     };
@@ -61,6 +66,7 @@ class FlashcardCard {
       columns: parsedColumns,
       known: json['known'] as bool? ?? false,
       score: json['score'] as int? ?? 0,
+      originalIndex: json['originalIndex'] as int?,
     );
   }
 
