@@ -75,16 +75,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Column(
                       children: [
                         Container(
-                          width: 80,
-                          height: 80,
+                          width: 84,
+                          height: 84,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            gradient: LinearGradient(
-                              colors: [
-                                Theme.of(context).primaryColor,
-                                Theme.of(context).primaryColor.withValues(alpha: 0.6),
-                              ],
-                            ),
                             boxShadow: [
                               BoxShadow(
                                 color: Theme.of(context).primaryColor.withValues(alpha: 0.3),
@@ -93,10 +87,19 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             ],
                           ),
-                          child: const Icon(
-                            Icons.menu_book,
-                            size: 40,
-                            color: Colors.white,
+                          child: ClipOval(
+                            child: Image.asset(
+                              'asset/logo/logoapp.png',
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) => Container(
+                                color: Theme.of(context).primaryColor,
+                                child: const Icon(
+                                  Icons.menu_book,
+                                  size: 40,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -758,6 +761,44 @@ class _SettingsDialogState extends State<_SettingsDialog> {
               ),
             ),
             const Divider(height: 24),
+
+            // Manage Files / Datasets
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Manage Files / Datasets',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Edit nama atau hapus file import',
+                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () => _showManageFilesDialog(context),
+                  icon: const Icon(Icons.folder_shared_rounded, size: 16),
+                  label: const Text('Manage Files', style: TextStyle(fontSize: 12)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blueAccent,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 24),
             
             // Export Settings
             const Text(
@@ -832,6 +873,225 @@ class _SettingsDialogState extends State<_SettingsDialog> {
       ],
     );
   }
+
+  void _showManageFilesDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => const _ManageFilesDialog(),
+    );
+  }
+}
+
+class _ManageFilesDialog extends StatelessWidget {
+  const _ManageFilesDialog();
+
+  void _showRenameDialog(BuildContext context, Deck deck) {
+    final controller = TextEditingController(text: deck.name);
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.edit_note_rounded, color: Colors.blueAccent),
+            SizedBox(width: 8),
+            Flexible(child: Text('Ubah Nama File / Dataset')),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Masukkan nama baru untuk dataset ini:',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                labelText: 'Nama Dataset',
+                isDense: true,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final newName = controller.text.trim();
+              if (newName.isNotEmpty && newName != deck.name) {
+                final provider = context.read<DeckProvider>();
+                await provider.renameDeck(deck.id, newName);
+                if (dialogCtx.mounted) {
+                  Navigator.pop(dialogCtx);
+                }
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Nama dataset berhasil diubah menjadi "$newName"'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } else {
+                Navigator.pop(dialogCtx);
+              }
+            },
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDeleteDialog(BuildContext context, Deck deck) {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.delete_forever_rounded, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Flexible(child: Text('Hapus Dataset')),
+          ],
+        ),
+        content: Text(
+          'Yakin ingin menghapus file/dataset "${deck.name}"?\n\n'
+          'Seluruh ${deck.totalCards} kartu dalam dataset ini akan dihapus dari aplikasi.',
+          style: const TextStyle(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final provider = context.read<DeckProvider>();
+              await provider.deleteDeck(deck.id);
+              if (dialogCtx.mounted) {
+                Navigator.pop(dialogCtx);
+              }
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Dataset "${deck.name}" berhasil dihapus'),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Hapus', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.folder_shared_rounded, color: Colors.blueAccent),
+          SizedBox(width: 10),
+          Flexible(
+            child: Text(
+              'Manage Files / Datasets',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: MediaQuery.of(context).size.width.clamp(320.0, 520.0),
+        child: Consumer<DeckProvider>(
+          builder: (context, provider, child) {
+            final decks = provider.decks;
+            if (decks.isEmpty) {
+              return const Padding(
+                padding: EdgeInsets.all(24.0),
+                child: Center(
+                  child: Text('Belum ada dataset yang diimpor.'),
+                ),
+              );
+            }
+
+            return Container(
+              constraints: const BoxConstraints(maxHeight: 360),
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: decks.length,
+                separatorBuilder: (context, index) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final deck = decks[index];
+                  final isCustom = deck.id == 'custom_mode_deck_default';
+
+                  return ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    leading: CircleAvatar(
+                      backgroundColor: isCustom
+                          ? Colors.purple.withValues(alpha: 0.15)
+                          : Colors.blue.withValues(alpha: 0.15),
+                      child: Icon(
+                        isCustom ? Icons.edit_calendar_rounded : Icons.description_rounded,
+                        color: isCustom ? Colors.purple : Colors.blueAccent,
+                        size: 20,
+                      ),
+                    ),
+                    title: Text(
+                      deck.name,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      softWrap: true,
+                      maxLines: 2,
+                    ),
+                    subtitle: Text(
+                      '${deck.totalCards} kartu • ${deck.columnCount} kolom',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined, color: Colors.blue, size: 20),
+                          tooltip: 'Ubah Nama File',
+                          onPressed: () => _showRenameDialog(context, deck),
+                        ),
+                        if (!isCustom)
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 20),
+                            tooltip: 'Hapus File',
+                            onPressed: () => _showDeleteDialog(context, deck),
+                          ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Tutup'),
+        ),
+      ],
+    );
+  }
 }
 
 class _StatCard extends StatelessWidget {
@@ -899,54 +1159,76 @@ class _ExportDeckWidgetState extends State<_ExportDeckWidget> {
     if (_selectedDeck == null) return;
     
     // Show mapping dialog
-    final exportOrder = await showDialog<List<int>>(
+    final result = await showDialog<ExportMappingResult>(
       context: context,
       builder: (context) => ExportMappingDialog(deck: _selectedDeck!),
     );
 
-    if (exportOrder == null) return; // Canceled
+    if (result == null) return; // Canceled
 
     try {
-      final bytes = await ExcelService.exportDeckToExcelBytes(_selectedDeck!, exportOrder: exportOrder);
-      String? dir;
-      try {
-        dir = await FilePicker.platform.getDirectoryPath(
-          dialogTitle: 'Select Directory to Save Excel File',
-        );
-      } catch (e) {
-        // Fallback or ignore if platform doesn't support directory picker
-      }
-      
-      if (dir != null) {
-        final file = File('$dir/Export_${_selectedDeck!.name}.xlsx');
-        await file.writeAsBytes(bytes);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Berhasil diekspor ke: ${file.path}'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      } else {
-        // Just standard saveFile if directory picker returns null or unsupported
+      final bytes = await ExcelService.exportDeckToExcelBytes(_selectedDeck!, exportOrder: result.exportOrder);
+      final fileName = result.fileName;
+
+      if (Platform.isAndroid || Platform.isIOS) {
         final savePath = await FilePicker.platform.saveFile(
-          dialogTitle: 'Save Excel File',
-          fileName: 'Export_${_selectedDeck!.name}.xlsx',
+          dialogTitle: 'Simpan File Excel',
+          fileName: fileName,
           type: FileType.custom,
           allowedExtensions: ['xlsx'],
           bytes: Uint8List.fromList(bytes),
         );
         if (savePath != null) {
-          final file = File(savePath);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Berhasil diekspor: $fileName'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        }
+      } else {
+        // Windows / Desktop: Support both directory picker and saveFile dialog
+        String? dir;
+        try {
+          dir = await FilePicker.platform.getDirectoryPath(
+            dialogTitle: 'Pilih Folder untuk Menyimpan File Excel',
+          );
+        } catch (_) {}
+
+        if (dir != null) {
+          final file = File('$dir/$fileName');
           await file.writeAsBytes(bytes);
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Berhasil diekspor ke: $savePath'),
+                content: Text('Berhasil diekspor ke: ${file.path}'),
                 backgroundColor: Colors.green,
               ),
             );
+          }
+        } else {
+          final savePath = await FilePicker.platform.saveFile(
+            dialogTitle: 'Simpan File Excel',
+            fileName: fileName,
+            type: FileType.custom,
+            allowedExtensions: ['xlsx'],
+            bytes: Uint8List.fromList(bytes),
+          );
+          if (savePath != null) {
+            final file = File(savePath);
+            if (!file.existsSync() || file.lengthSync() == 0) {
+              await file.writeAsBytes(bytes);
+            }
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Berhasil diekspor ke: $savePath'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            }
           }
         }
       }

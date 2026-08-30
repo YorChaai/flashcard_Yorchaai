@@ -111,25 +111,28 @@ class ExcelService {
     }
   }
 
+  static const int scoreColumnIndex = -2;
+
   static Future<List<int>> exportDeckToExcelBytes(Deck deck, {List<int>? exportOrder}) async {
     final workbook = xlsio.Workbook();
     final sheet = workbook.worksheets[0];
     sheet.name = 'Sheet1';
 
-    // Default order is 0, 1, 2...
-    final order = exportOrder ?? List.generate(deck.columnCount, (i) => i);
+    // Default order: 0, 1, 2... and scoreColumnIndex (-2) at the end
+    final order = exportOrder ?? [...List.generate(deck.columnCount, (i) => i), scoreColumnIndex];
 
     // Add headers (Syncfusion uses 1-based indexing)
     int colIndex = 1;
     for (int index in order) {
-      if (index >= 0 && index < deck.columnHeaders.length) {
+      if (index == scoreColumnIndex) {
+        sheet.getRangeByIndex(1, colIndex).setText('score');
+      } else if (index >= 0 && index < deck.columnHeaders.length) {
         sheet.getRangeByIndex(1, colIndex).setText(deck.columnHeaders[index]);
       } else {
         sheet.getRangeByIndex(1, colIndex).setText('Empty Column');
       }
       colIndex++;
     }
-    sheet.getRangeByIndex(1, colIndex).setText('score');
 
     // Add rows
     for (int i = 0; i < deck.cards.length; i++) {
@@ -138,15 +141,15 @@ class ExcelService {
       
       int cIndex = 1;
       for (int index in order) {
-        if (index >= 0 && index < cols.length) {
+        if (index == scoreColumnIndex) {
+          sheet.getRangeByIndex(i + 2, cIndex).setNumber(card.score.toDouble());
+        } else if (index >= 0 && index < cols.length) {
           sheet.getRangeByIndex(i + 2, cIndex).setText(cols[index]);
         } else {
           sheet.getRangeByIndex(i + 2, cIndex).setText('');
         }
         cIndex++;
       }
-      
-      sheet.getRangeByIndex(i + 2, cIndex).setNumber(card.score.toDouble());
     }
 
     final List<int> bytes = workbook.saveAsStream();
@@ -171,8 +174,8 @@ class ExcelService {
       final headerRow = table.rows[0];
       int scoreColumnIndex = -1;
       for (int i = 0; i < headerRow.length; i++) {
-        final headerValue = headerRow[i]?.toString().toLowerCase();
-        if (headerValue == 'score' || headerValue == '_appmeta_score') {
+        final headerValue = headerRow[i]?.toString().toLowerCase().trim();
+        if (headerValue == 'score' || headerValue == 'skor' || headerValue == 'nilai' || headerValue == '_appmeta_score') {
           scoreColumnIndex = i;
           break;
         }
@@ -233,8 +236,13 @@ class ExcelService {
 
         int score = 0;
         if (scoreColumnIndex != -1 && scoreColumnIndex < row.length) {
-          final scoreValue = row[scoreColumnIndex]?.toString();
-          score = int.tryParse(scoreValue ?? '0') ?? 0;
+          final rawVal = row[scoreColumnIndex];
+          if (rawVal is num) {
+            score = rawVal.round();
+          } else if (rawVal != null) {
+            final strVal = rawVal.toString().trim();
+            score = int.tryParse(strVal) ?? (double.tryParse(strVal)?.round() ?? 0);
+          }
         }
 
         cards.add(
@@ -350,8 +358,8 @@ except Exception as e:
 
       int scoreColumnIndex = -1;
       for (int i = 0; i < headerRow.length; i++) {
-        final headerValue = headerRow[i]?.toString().toLowerCase();
-        if (headerValue == 'score' || headerValue == '_appmeta_score') {
+        final headerValue = headerRow[i]?.toString().toLowerCase().trim();
+        if (headerValue == 'score' || headerValue == 'skor' || headerValue == 'nilai' || headerValue == '_appmeta_score') {
           scoreColumnIndex = i;
           break;
         }
