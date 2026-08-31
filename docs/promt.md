@@ -14,7 +14,7 @@ Tugasmu:
 3. berarti terdapat 1 kata 2 dialog jadi kalo ada 5 noun berarti ada 10 dialog, di tambah ada verbs 10 dialog, adjectives 10 dialog, dan total ada 30 dialog
 4. Cantumkan keterangan **kelas kata** (noun/verb/adjective) di samping setiap kata.
 5. dibawahnya jika kamu sudah bikin kalimatnya tambahin internasional phonectic alfabet dari kalimat yang kamu bikin
-6. tambahin bahasa translate ke indonesia di bawah IPA
+6. tambahin bahasa translate ke indonesia di bawah IPA1
 7. Susun balasan dengan format:
 
 strukturnya :

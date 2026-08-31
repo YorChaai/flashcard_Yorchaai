@@ -1448,6 +1448,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
 
               setState(() {
                 _allCards.removeWhere((c) => c.id == card.id);
+                _selectedCardIds.remove(card.id);
               });
               _extractUniqueTypes();
               _applyFilterAndSort();
