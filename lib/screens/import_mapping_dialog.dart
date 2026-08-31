@@ -115,7 +115,7 @@ class _ImportMappingDialogState extends State<ImportMappingDialog> {
                   DropdownButton<int>(
                     value: _numFlashcardColumns,
                     items: List.generate(
-                      widget.metadata.columnHeaders.length > 10 ? widget.metadata.columnHeaders.length : 10,
+                      widget.metadata.columnHeaders.isNotEmpty ? widget.metadata.columnHeaders.length : 1,
                       (index) => index + 1,
                     ).map((val) {
                       return DropdownMenuItem(value: val, child: Text('$val Kolom'));
