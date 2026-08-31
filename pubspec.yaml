@@ -40,6 +40,7 @@ dependencies:
 
   # Excel file parsing
   spreadsheet_decoder: ^2.2.0
+  archive: ^3.6.1
 
   # File picker for importing Excel files
   file_picker: ^8.1.2

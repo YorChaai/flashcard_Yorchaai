@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'dart:io';
+import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
 import 'package:spreadsheet_decoder/spreadsheet_decoder.dart';
 import 'package:syncfusion_flutter_xlsio/xlsio.dart' as xlsio;
@@ -72,6 +74,51 @@ class ExcelService {
     return fileName.replaceAll(RegExp(r'\.xlsx?$', caseSensitive: false), '');
   }
 
+  /// Automatically repairs Excel XML containing empty `<v></v>` or formula tags that break SpreadsheetDecoder
+  static List<int> sanitizeExcelBytes(List<int> bytes) {
+    try {
+      final archive = ZipDecoder().decodeBytes(bytes);
+      final newArchive = Archive();
+
+      bool modified = false;
+
+      for (final file in archive) {
+        if (file.isFile) {
+          if (file.name.startsWith('xl/worksheets/sheet') && file.name.endsWith('.xml')) {
+            var xmlContent = utf8.decode(file.content as List<int>);
+
+            // Regex to fix empty <v></v> or <v/> tags or formula cells without t
+            final fixedXml = xmlContent.replaceAllMapped(
+              RegExp(r'(<c\b[^>]*?)>(\s*(?:<f\b.*?</f>\s*)?(?:<v\s*/>|<v>\s*</v>)\s*</c>)'),
+              (match) {
+                var cTag = match.group(1)!;
+                var inner = match.group(2)!;
+                if (!cTag.contains(' t=')) {
+                  cTag = '$cTag t="str"';
+                }
+                inner = inner.replaceAll(RegExp(r'<v\s*/>'), '<v></v>');
+                return '$cTag>$inner';
+              },
+            );
+
+            if (fixedXml != xmlContent) {
+              modified = true;
+              final newBytes = utf8.encode(fixedXml);
+              newArchive.addFile(ArchiveFile(file.name, newBytes.length, newBytes));
+              continue;
+            }
+          }
+          newArchive.addFile(ArchiveFile(file.name, file.size, file.content));
+        }
+      }
+
+      if (modified) {
+        return ZipEncoder().encode(newArchive) ?? bytes;
+      }
+    } catch (_) {}
+    return bytes;
+  }
+
   static Future<Deck> parseExcelFile(
     String filePath,
     String deckName,
@@ -101,7 +148,13 @@ class ExcelService {
 
   static Deck _parseExcelFromBytesIsolate(_ParseDeckParams params) {
     try {
-      final decoder = SpreadsheetDecoder.decodeBytes(params.bytes);
+      SpreadsheetDecoder decoder;
+      try {
+        decoder = SpreadsheetDecoder.decodeBytes(params.bytes);
+      } catch (_) {
+        final cleanBytes = sanitizeExcelBytes(params.bytes);
+        decoder = SpreadsheetDecoder.decodeBytes(cleanBytes);
+      }
       return _buildDeckFromDecoder(decoder, params.deckName,
           targetSheetName: params.targetSheetName, importOrder: params.importOrder);
     } catch (e) {
@@ -329,7 +382,13 @@ except Exception as e:
   static List<String> _getAvailableSheetsSync(List<int> bytes) {
     List<String> validSheets = [];
     try {
-      final decoder = SpreadsheetDecoder.decodeBytes(bytes);
+      SpreadsheetDecoder decoder;
+      try {
+        decoder = SpreadsheetDecoder.decodeBytes(bytes);
+      } catch (_) {
+        final cleanBytes = sanitizeExcelBytes(bytes);
+        decoder = SpreadsheetDecoder.decodeBytes(cleanBytes);
+      }
       for (var table in decoder.tables.keys) {
         if (decoder.tables[table]!.rows.isNotEmpty) {
           validSheets.add(table.toString());
@@ -346,7 +405,13 @@ except Exception as e:
     final fileName = args['fileName'] as String;
     final targetSheetName = args['targetSheetName'] as String?;
 
-    final decoder = SpreadsheetDecoder.decodeBytes(bytes);
+    SpreadsheetDecoder decoder;
+    try {
+      decoder = SpreadsheetDecoder.decodeBytes(bytes);
+    } catch (_) {
+      final cleanBytes = sanitizeExcelBytes(bytes);
+      decoder = SpreadsheetDecoder.decodeBytes(cleanBytes);
+    }
 
     for (var sheetName in decoder.tables.keys) {
       if (targetSheetName != null && sheetName != targetSheetName) continue;

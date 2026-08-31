@@ -18,10 +18,9 @@ class _ImportMappingDialogState extends State<ImportMappingDialog> {
   @override
   void initState() {
     super.initState();
-    // Default to min(6, headers.length)
+    // Default to all columns in the dataset (unlimited)
     _numFlashcardColumns = widget.metadata.columnHeaders.length;
-    if (_numFlashcardColumns > 6) _numFlashcardColumns = 6;
-    if (_numFlashcardColumns < 2) _numFlashcardColumns = 2;
+    if (_numFlashcardColumns < 1) _numFlashcardColumns = 1;
 
     _updateSelectionList(initial: true);
   }
@@ -115,7 +114,10 @@ class _ImportMappingDialogState extends State<ImportMappingDialog> {
                   const SizedBox(width: 12),
                   DropdownButton<int>(
                     value: _numFlashcardColumns,
-                    items: List.generate(5, (index) => index + 2).map((val) {
+                    items: List.generate(
+                      widget.metadata.columnHeaders.length > 10 ? widget.metadata.columnHeaders.length : 10,
+                      (index) => index + 1,
+                    ).map((val) {
                       return DropdownMenuItem(value: val, child: Text('$val Kolom'));
                     }).toList(),
                     onChanged: (val) {
