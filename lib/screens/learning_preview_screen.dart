@@ -1546,53 +1546,53 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
             if (_isRefreshing)
               const Center(
                 child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16.0),
+                  padding: EdgeInsets.symmetric(horizontal: 12.0),
                   child: SizedBox(
-                    width: 20,
-                    height: 20,
+                    width: 18,
+                    height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                   ),
                 ),
               )
-            else ...[
-              ElevatedButton.icon(
+            else
+              IconButton(
                 onPressed: _handleRefreshSource,
-                icon: const Icon(Icons.sync, size: 18),
-                label: const Text('Refresh Source'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
-                  foregroundColor: Colors.white,
-                ),
+                icon: const Icon(Icons.sync, size: 20),
+                tooltip: 'Refresh Source',
               ),
-              const SizedBox(width: 8),
-            ],
           ],
-          // Copy Prompt button (Logo + (count))
-          Tooltip(
-            message: _selectedCardIds.isNotEmpty
-                ? 'Copy Prompt (${_selectedCardIds.length} baris terpilih)'
-                : 'Copy Prompt (Semua ${_filteredSortedCards.length} baris preview)',
-            child: ElevatedButton.icon(
+          // Modern Copy Prompt Badge Action
+          Badge(
+            label: Text(
+              _selectedCardIds.isNotEmpty
+                  ? '${_selectedCardIds.length}'
+                  : '${_filteredSortedCards.length}',
+              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+            ),
+            backgroundColor: _selectedCardIds.isNotEmpty ? Colors.green : Colors.blueAccent,
+            isLabelVisible: true,
+            child: IconButton(
               onPressed: _copyPrompt,
-              icon: const Icon(Icons.copy_rounded, size: 18),
-              label: Text(
-                _selectedCardIds.isNotEmpty
-                    ? '(${_selectedCardIds.length})'
-                    : '(${_filteredSortedCards.length})',
-                style: const TextStyle(fontWeight: FontWeight.bold),
+              icon: Icon(
+                Icons.copy_rounded,
+                color: _selectedCardIds.isNotEmpty ? Colors.greenAccent : null,
+                size: 20,
               ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _selectedCardIds.isNotEmpty ? Colors.green[700] : Colors.blueAccent,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              ),
+              tooltip: _selectedCardIds.isNotEmpty
+                  ? 'Copy Prompt (${_selectedCardIds.length} baris terpilih)'
+                  : 'Copy Prompt (Semua ${_filteredSortedCards.length} baris preview)',
             ),
           ),
-          const SizedBox(width: 8),
-          // Deleted Data button for ALL datasets (Icon + Count only)
-          Tooltip(
-            message: 'Deleted Data (${deck?.deletedCards.length ?? 0} item)',
-            child: ElevatedButton.icon(
+          const SizedBox(width: 4),
+          // Modern Deleted Data Badge Action
+          Badge(
+            label: Text(
+              '${deck?.deletedCards.length ?? 0}',
+              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+            ),
+            backgroundColor: (deck?.deletedCards.isNotEmpty ?? false) ? Colors.redAccent : Colors.grey[700],
+            isLabelVisible: (deck?.deletedCards.length ?? 0) > 0,
+            child: IconButton(
               onPressed: () {
                 final currentDeck = _getCurrentDeck();
                 if (currentDeck != null) {
@@ -1620,16 +1620,11 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                   });
                 }
               },
-              icon: const Icon(Icons.delete_outline_rounded, size: 18),
-              label: Text('${deck?.deletedCards.length ?? 0}'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.grey[800],
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              ),
+              icon: const Icon(Icons.delete_outline_rounded, size: 20),
+              tooltip: 'Deleted Data (${deck?.deletedCards.length ?? 0} item)',
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
         ],
       ),
       body: Column(
@@ -2152,29 +2147,28 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
               alignment: WrapAlignment.spaceBetween,
               crossAxisAlignment: WrapCrossAlignment.center,
               spacing: 8,
-              runSpacing: 8,
+              runSpacing: 6,
               children: [
-                Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 8,
-                  runSpacing: 4,
+                Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     const Text(
                       '👀 Data Preview',
                       style: TextStyle(
-                        fontSize: 18,
+                        fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
+                    const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         color: Colors.blue.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
-                        '${_filteredSortedCards.length} of ${_allCards.length} baris',
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue),
+                        '${_filteredSortedCards.length} / ${_allCards.length}',
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blue),
                       ),
                     ),
                   ],
@@ -2183,16 +2177,15 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('Rows/page: ', style: TextStyle(fontSize: 13)),
                     DropdownButton<int>(
                       value: _rowsPerPage,
                       isDense: true,
                       underline: const SizedBox(),
                       items: const [
-                        DropdownMenuItem(value: 25, child: Text('25')),
-                        DropdownMenuItem(value: 50, child: Text('50')),
-                        DropdownMenuItem(value: 100, child: Text('100')),
-                        DropdownMenuItem(value: 250, child: Text('250')),
+                        DropdownMenuItem(value: 25, child: Text('25/page', style: TextStyle(fontSize: 12))),
+                        DropdownMenuItem(value: 50, child: Text('50/page', style: TextStyle(fontSize: 12))),
+                        DropdownMenuItem(value: 100, child: Text('100/page', style: TextStyle(fontSize: 12))),
+                        DropdownMenuItem(value: 250, child: Text('250/page', style: TextStyle(fontSize: 12))),
                       ],
                       onChanged: (val) {
                         if (val != null) {
@@ -2208,37 +2201,38 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
               ],
             ),
             if (_selectedCardIds.isNotEmpty) ...[
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.green.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.green.withValues(alpha: 0.4)),
+                  color: Colors.green.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.green.withValues(alpha: 0.35)),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.check_circle, color: Colors.green, size: 18),
-                    const SizedBox(width: 8),
+                    const Icon(Icons.check_circle_rounded, color: Colors.green, size: 16),
+                    const SizedBox(width: 6),
                     Expanded(
                       child: Text(
                         '${_selectedCardIds.length} baris dipilih',
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 13),
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 12),
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
                       ),
                     ),
                     const SizedBox(width: 4),
-                    IconButton(
-                      icon: const Icon(Icons.close, size: 18, color: Colors.redAccent),
-                      tooltip: 'Batal Pilih (${_selectedCardIds.length})',
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                      onPressed: () {
+                    InkWell(
+                      onTap: () {
                         setState(() {
                           _selectedCardIds.clear();
                         });
                       },
+                      borderRadius: BorderRadius.circular(12),
+                      child: const Padding(
+                        padding: EdgeInsets.all(2.0),
+                        child: Icon(Icons.close, size: 16, color: Colors.redAccent),
+                      ),
                     ),
                   ],
                 ),
