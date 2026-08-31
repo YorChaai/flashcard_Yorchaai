@@ -1567,7 +1567,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
               const SizedBox(width: 8),
             ],
           ],
-          // Copy Prompt button
+          // Copy Prompt button (Logo + (count))
           Tooltip(
             message: _selectedCardIds.isNotEmpty
                 ? 'Copy Prompt (${_selectedCardIds.length} baris terpilih)'
@@ -1577,13 +1577,14 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
               icon: const Icon(Icons.copy_rounded, size: 18),
               label: Text(
                 _selectedCardIds.isNotEmpty
-                    ? 'Copy Prompt (${_selectedCardIds.length})'
-                    : 'Copy Prompt',
+                    ? '(${_selectedCardIds.length})'
+                    : '(${_filteredSortedCards.length})',
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: _selectedCardIds.isNotEmpty ? Colors.green[700] : Colors.blueAccent,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               ),
             ),
           ),
@@ -2224,23 +2225,16 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                       style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 13),
                     ),
                     const Spacer(),
-                    TextButton(
-                      onPressed: () {
-                        setState(() {
-                          for (final c in pageCards) {
-                            _selectedCardIds.add(c.id);
-                          }
-                        });
-                      },
-                      child: const Text('Pilih Halaman Ini', style: TextStyle(fontSize: 12)),
-                    ),
-                    TextButton(
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 18, color: Colors.redAccent),
+                      tooltip: 'Batal Pilih (${_selectedCardIds.length})',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
                       onPressed: () {
                         setState(() {
                           _selectedCardIds.clear();
                         });
                       },
-                      child: const Text('Batal Pilih', style: TextStyle(fontSize: 12, color: Colors.redAccent)),
                     ),
                   ],
                 ),
