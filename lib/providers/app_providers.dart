@@ -19,38 +19,13 @@ class DeckProvider extends ChangeNotifier {
   Future<void> loadDecks() async {
     _decks = await _storageService.loadDecks();
     
-    // Auto-fix any decks that were imported with more than 6 columns
-    // (backward compatibility fix for when 10 columns were allowed)
     bool needsSave = false;
     for (int i = 0; i < _decks.length; i++) {
       final deck = _decks[i];
       Deck currentDeck = deck;
       bool modified = false;
 
-      // Fix 1: Truncate decks with > 6 columns
-      if (currentDeck.columnCount > 6) {
-        final newHeaders = currentDeck.columnHeaders.length > 6 
-            ? currentDeck.columnHeaders.sublist(0, 6) 
-            : currentDeck.columnHeaders;
-            
-        final newCards = currentDeck.cards.map((card) {
-          return card.copyWith(
-            columns: card.columns.length > 6 
-                ? card.columns.sublist(0, 6) 
-                : card.columns,
-          );
-        }).toList();
-        
-        currentDeck = currentDeck.copyWith(
-          columnCount: 6,
-          columnHeaders: newHeaders,
-          cards: newCards,
-        );
-        modified = true;
-      }
-
-      // Fix 2: Ensure visibleColumnCount is never greater than columnCount
-      // (This recovers decks corrupted by previous versions)
+      // Ensure visibleColumnCount is never greater than columnCount
       if (currentDeck.visibleColumnCount > currentDeck.columnCount) {
         currentDeck = currentDeck.copyWith(
           visibleColumnCount: currentDeck.columnCount,
@@ -80,6 +55,12 @@ class DeckProvider extends ChangeNotifier {
 
     if (needsSave) {
       await _storageService.saveDecks(_decks);
+    }
+
+    // Eagerly pre-load all deck configs to ensure persistence across all screens and restarts
+    for (final deck in _decks) {
+      final config = await _storageService.getDeckConfig(deck.id);
+      _deckConfigs[deck.id] = config;
     }
     
     notifyListeners();
@@ -670,6 +651,16 @@ class DeckProvider extends ChangeNotifier {
         if (card.score < 0) return config.selectedFilterScore.contains('<0');
         if (card.score == 0) return config.selectedFilterScore.contains('0');
         return config.selectedFilterScore.contains('>0');
+      }).toList();
+    }
+
+    // Range Filter (by original row number)
+    if (config.rangeStart != null || config.rangeEnd != null) {
+      final start = config.rangeStart ?? 1;
+      final end = config.rangeEnd ?? deck.cards.length;
+      result = result.where((card) {
+        final originalNo = cardOriginalNumbers[card.id] ?? 0;
+        return originalNo >= start && originalNo <= end;
       }).toList();
     }
 

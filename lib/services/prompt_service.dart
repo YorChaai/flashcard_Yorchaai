@@ -378,43 +378,48 @@ class PromptService {
     }
 
     // 3. Assemble Full Prompt
-    return '''<aside>
-✏️
-
-${headerBuffer.toString().trim()}
+    return '''${headerBuffer.toString().trim()}
 
 Tugasmu:
 
-1. Untuk **setiap kata**, buatlah **5 contoh dialog dimana dialog itu menghasilkan 2 kalimat saja(yang dimana kalimat sehari hari) dan boleh ada kata kerja v1,v2,v3,ving**.
+1. Untuk **setiap kata**, buatlah **2 contoh dialog dimana dialog itu menghasilkan 2 kalimat saja (yang dimana kalimat percakapan sehari-hari) dan boleh ada kata kerja v1, v2, v3, v-ing**.
 2. utamakan noun dulu, baru verbs, baru adjective, intinya sebaris di kasih tahu
 $point3Text
-4. Cantumkan keterangan **kelas kata** (noun/verb/adjective) di samping setiap kata.
+4. Cantumkan keterangan **kelas kata** (noun/verb/adjective) di samping setiap kata. Jika satu kata memiliki lebih dari satu kelas kata, buatkan bagian dialog terpisah untuk masing-masing kelas katanya.
 5. dibawahnya jika kamu sudah bikin kalimatnya tambahin internasional phonectic alfabet dari kalimat yang kamu bikin
 6. tambahin bahasa translate ke indonesia di bawah IPA
 7. Susun balasan dengan format:
 
 strukturnya :
-[Kata] (kelas kata) (heading1)
+# [Kata] ([kelas kata])
 
-Dialog 1 (heading2)
+## Dialog 1
 A: …
 B: …
 (IPA)
+/…/
+/…/
 (ARTI)
+…
+…
 
-Dialog 2
+## Dialog 2
 A: …
 B: …
 (IPA)
+/…/
+/…/
 (ARTI)
+…
+…
 
 ---
 
 Contoh hasil:
 
-("number") area (noun)
+# ("number") area (noun)
 
-Dialog 1
+## Dialog 1
 A: This area of the park is always shaded.
 B: It’s perfect for a picnic.
 (IPA)
@@ -424,7 +429,7 @@ B: It’s perfect for a picnic.
 Area taman ini selalu teduh.
 Cocok untuk piknik.
 
-Dialog 2
+## Dialog 2
 A: Did you see the new seating area inside the library?
 B: Yes, they expanded it last month.
 (IPA)
@@ -436,9 +441,9 @@ Ya, mereka memperluasnya bulan lalu.
 
 ---
 
-("number") book (noun)
+# ("number") book (noun)
 
-Dialog 1
+## Dialog 1
 A: I just finished reading that book you lent me.
 B: How did you like the ending?
 (IPA)
@@ -448,7 +453,7 @@ B: How did you like the ending?
 Saya baru saja selesai membaca buku yang kamu pinjamkan.
 Bagaimana menurutmu akhir ceritanya?
 
-Dialog 2
+## Dialog 2
 A: Can you pass me the book on the shelf?
 B: Sure, here it is.
 (IPA)
@@ -456,8 +461,6 @@ B: Sure, here it is.
 /ʃʊr hɪər ɪt ɪz/
 (ARTI)
 Bisakah kamu memberiku buku di rak itu?
-Tentu, ini dia.
-
-</aside>''';
+Tentu, ini dia.''';
   }
 }

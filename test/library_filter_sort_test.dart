@@ -119,5 +119,36 @@ void main() {
       expect(sortedDesc.first.columns[0], 'search');
       expect(sortedDesc.last.columns[0], 'new');
     });
+
+    test('Range filter by original row numbers combined with 9->0 sort', () {
+      final originalNumbers = {
+        '1': 1,
+        '2': 2,
+        '3': 3,
+        '4': 4,
+        '5': 5,
+      };
+
+      // Range From 2 To 4 (Original rows 2, 3, 4)
+      final inRange = mockCards.where((c) {
+        final no = originalNumbers[c.id]!;
+        return no >= 2 && no <= 4;
+      }).toList();
+
+      expect(inRange.map((c) => originalNumbers[c.id]), [2, 3, 4]);
+
+      // Sorted 9 -> 0 (Descending)
+      final sortedDesc = List<FlashcardCard>.from(inRange)
+        ..sort((a, b) {
+          final noA = originalNumbers[a.id]!;
+          final noB = originalNumbers[b.id]!;
+          return noB.compareTo(noA);
+        });
+
+      // Output must be: [4, 3, 2] ('page', 'home', 'more')
+      expect(sortedDesc.map((c) => originalNumbers[c.id]), [4, 3, 2]);
+      expect(sortedDesc.first.columns[0], 'page');
+      expect(sortedDesc.last.columns[0], 'more');
+    });
   });
 }

@@ -21,8 +21,8 @@ void main() {
       expect(prompt.contains('terbagi dalam:'), isFalse);
       expect(prompt.contains('* 1 verb (kata kerja): ask'), isTrue);
       expect(prompt.contains('3. berarti terdapat 1 kata 2 dialog jadi kalo ada 1 verb berarti ada 2 dialog, dan total ada 2 dialog'), isTrue);
-      expect(prompt.contains('<aside>'), isTrue);
-      expect(prompt.contains('</aside>'), isTrue);
+      expect(prompt.contains('<aside>'), isFalse);
+      expect(prompt.contains('</aside>'), isFalse);
     });
 
     test('Scenario 2: 15 mixed words (5 nouns, 5 verbs, 5 adjectives)', () {

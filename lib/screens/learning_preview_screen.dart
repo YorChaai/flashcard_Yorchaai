@@ -80,6 +80,40 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
       _cardOriginalNumbers[_allCards[i].id] = i + 1;
     }
     _extractUniqueTypes();
+
+    final deck = _getCurrentDeck();
+    if (deck != null) {
+      final provider = context.read<DeckProvider>();
+      final config = provider.getDeckConfig(deck.id);
+
+      _sortColumnIndex = config.sortColumnIndex;
+      _sortAscending = config.sortAscending;
+      if (config.typeSortPriority.isNotEmpty) {
+        _typeSortPriority = List.from(config.typeSortPriority);
+      }
+      _cefrSortAscending = config.cefrSortAscending;
+      _scoreSortAscending = config.scoreSortAscending;
+
+      if (config.selectedFilterTypes.isNotEmpty) {
+        _selectedFilterTypes = Set.from(config.selectedFilterTypes);
+        _isTypeFilterInitialized = true;
+      }
+
+      if (config.selectedFilterCefr.isNotEmpty) {
+        _selectedCefrLevels = Set.from(config.selectedFilterCefr);
+      }
+
+      if (config.selectedFilterScore.isNotEmpty) {
+        _includeNegativeScore = config.selectedFilterScore.contains('<0');
+        _includeZeroScore = config.selectedFilterScore.contains('0');
+        _includePositiveScore = config.selectedFilterScore.contains('>0');
+      }
+
+      _rangeStart = config.rangeStart ?? deck.lastLearningRangeStart;
+      _rangeEnd = config.rangeEnd ?? deck.lastLearningRangeEnd;
+      _orderMode = config.orderMode;
+    }
+
     _applyFilterAndSort();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadSavedConfig();
@@ -301,7 +335,17 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
       }).toList();
     }
 
-    // 5. Sorting
+    // 5. Range Filter (Berdasarkan Nomor Baris Asli Kartu / Original Row Number)
+    if (_rangeStart != null || _rangeEnd != null) {
+      final start = _rangeStart ?? 1;
+      final end = _rangeEnd ?? _allCards.length;
+      result = result.where((card) {
+        final originalNo = _cardOriginalNumbers[card.id] ?? 0;
+        return originalNo >= start && originalNo <= end;
+      }).toList();
+    }
+
+    // 6. Sorting
     if (_sortColumnIndex != null) {
       final sortCol = _sortColumnIndex!;
       if (sortCol == 0) {
@@ -391,17 +435,6 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
             final noB = _cardOriginalNumbers[b.id] ?? 0;
             return _sortAscending ? noA.compareTo(noB) : noB.compareTo(noA);
           });
-        }
-      }
-    }
-
-    // 6. Range Filter (From..To)
-    if (_rangeStart != null || _rangeEnd != null) {
-      if (result.isNotEmpty) {
-        final start = (_rangeStart ?? 1).clamp(1, result.length) - 1;
-        final end = (_rangeEnd ?? result.length).clamp(1, result.length);
-        if (start < end) {
-          result = result.sublist(start, end);
         }
       }
     }
@@ -858,7 +891,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
               ElevatedButton(
                 onPressed: () {
                   setState(() {
-                    _sortColumnIndex = tempSortCol == 0 ? null : tempSortCol;
+                    _sortColumnIndex = (tempSortCol == 0 && tempAscending) ? null : tempSortCol;
                     _sortAscending = tempAscending;
                     _typeSortPriority = List.from(tempTypePriority);
                     _currentPage = 0;
@@ -1666,8 +1699,8 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
     final isScoreFiltered = !(_includeNegativeScore && _includeZeroScore && _includePositiveScore);
     final isRangeFiltered = _rangeStart != null || _rangeEnd != null;
     final isSpecificFilterActive = isTypeFiltered || isCefrFiltered || isScoreFiltered || isRangeFiltered;
-    final isFiltered = _searchQuery.isNotEmpty || isSpecificFilterActive || _sortColumnIndex != null;
-    final isSorted = _sortColumnIndex != null;
+    final isSorted = _sortColumnIndex != null && !(_sortColumnIndex == 0 && _sortAscending);
+    final isFiltered = _searchQuery.isNotEmpty || isSpecificFilterActive || isSorted;
 
     final selectedSortColName = _sortColumnIndex != null && _sortColumnIndex! > 0 && _sortColumnIndex! <= widget.columnHeaders.length
         ? widget.columnHeaders[_sortColumnIndex! - 1].trim().toLowerCase()
