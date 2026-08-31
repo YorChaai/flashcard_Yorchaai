@@ -87,5 +87,37 @@ void main() {
 
       expect(sortedCefr.last.columns[0], 'search'); // B1 rank 2
     });
+
+    test('No. column sorting (0->9 Ascending and 9->0 Descending)', () {
+      final originalNumbers = {
+        '1': 1,
+        '2': 2,
+        '3': 3,
+        '4': 4,
+        '5': 5,
+      };
+
+      // 0 -> 9 (Ascending: 1 -> 5)
+      final sortedAsc = List<FlashcardCard>.from(mockCards)
+        ..sort((a, b) {
+          final noA = originalNumbers[a.id] ?? 0;
+          final noB = originalNumbers[b.id] ?? 0;
+          return noA.compareTo(noB);
+        });
+      expect(sortedAsc.map((c) => originalNumbers[c.id]), [1, 2, 3, 4, 5]);
+      expect(sortedAsc.first.columns[0], 'new');
+      expect(sortedAsc.last.columns[0], 'search');
+
+      // 9 -> 0 (Descending: 5 -> 1)
+      final sortedDesc = List<FlashcardCard>.from(mockCards)
+        ..sort((a, b) {
+          final noA = originalNumbers[a.id] ?? 0;
+          final noB = originalNumbers[b.id] ?? 0;
+          return noB.compareTo(noA);
+        });
+      expect(sortedDesc.map((c) => originalNumbers[c.id]), [5, 4, 3, 2, 1]);
+      expect(sortedDesc.first.columns[0], 'search');
+      expect(sortedDesc.last.columns[0], 'new');
+    });
   });
 }
