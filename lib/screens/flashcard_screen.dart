@@ -1,9 +1,11 @@
 import 'dart:math' show pi;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_providers.dart';
 import '../providers/theme_provider.dart';
 import '../models/flashcard_card.dart' as flashcard_models;
+import '../services/prompt_service.dart';
 import 'result_screen.dart';
 
 // Shadow and divider constants
@@ -41,6 +43,35 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     super.dispose();
   }
 
+  void _copyPrompt(BuildContext context, LearningSessionProvider sessionProvider) {
+    final deck = context.read<DeckProvider>().selectedDeck;
+    final currentCard = sessionProvider.currentCard;
+
+    if (currentCard == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tidak ada kata untuk dibuatkan prompt.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    final prompt = PromptService.generatePrompt(
+      cards: [currentCard],
+      deck: deck,
+    );
+
+    Clipboard.setData(ClipboardData(text: prompt));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Prompt berhasil disalin ke clipboard!'),
+        duration: Duration(seconds: 2),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final sessionProvider = context.watch<LearningSessionProvider>();
@@ -52,22 +83,18 @@ class _FlashcardScreenState extends State<FlashcardScreen>
       );
     }
 
+    final isLastCard =
+        sessionProvider.currentIndex >= sessionProvider.totalCards - 1;
+
     return Scaffold(
       appBar: AppBar(
         title:
             Text('${sessionProvider.currentIndex + 1} / ${sessionProvider.totalCards}'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.bar_chart),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const ResultScreen(),
-                  settings: const RouteSettings(name: 'ResultScreen'),
-                ),
-              );
-            },
+            icon: const Icon(Icons.copy_rounded),
+            tooltip: 'Copy Prompt',
+            onPressed: () => _copyPrompt(context, sessionProvider),
           ),
         ],
       ),
@@ -208,6 +235,12 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                   child: OutlinedButton.icon(
                     onPressed: sessionProvider.currentIndex > 0
                         ? () {
+                            if (_isShowingBack) {
+                              _animationController.reset();
+                              setState(() {
+                                _isShowingBack = false;
+                              });
+                            }
                             sessionProvider.previousCard();
                           }
                         : null,
@@ -221,15 +254,31 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                 const SizedBox(width: 16),
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed:
-                        sessionProvider.currentIndex <
-                                sessionProvider.totalCards - 1
-                            ? () {
-                                sessionProvider.nextCard();
-                              }
-                            : null,
-                    icon: const Icon(Icons.arrow_forward),
-                    label: const Text('Next'),
+                    onPressed: () {
+                      if (isLastCard) {
+                        Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ResultScreen(),
+                            settings: const RouteSettings(name: 'ResultScreen'),
+                          ),
+                        );
+                      } else {
+                        if (_isShowingBack) {
+                          _animationController.reset();
+                          setState(() {
+                            _isShowingBack = false;
+                          });
+                        }
+                        sessionProvider.nextCard();
+                      }
+                    },
+                    icon: Icon(
+                      isLastCard ? Icons.done_all : Icons.arrow_forward,
+                    ),
+                    label: Text(
+                      isLastCard ? 'Finish' : 'Next',
+                    ),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                     ),

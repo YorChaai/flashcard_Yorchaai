@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../models/deck.dart';
 import '../models/deck_config.dart';
 import '../models/flashcard_card.dart';
 import '../models/order_mode.dart';
 import '../providers/app_providers.dart';
+import '../services/prompt_service.dart';
 import '../widgets/swipeable_notification.dart';
 import 'deleted_data_screen.dart';
 
@@ -27,6 +29,9 @@ class LearningPreviewScreen extends StatefulWidget {
 class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
   late List<FlashcardCard> _allCards;
   late List<FlashcardCard> _filteredSortedCards;
+
+  // Row selection state for Copy Prompt & batch operations
+  final Set<String> _selectedCardIds = {};
 
   // Search & Filter state
   final TextEditingController _searchController = TextEditingController();
@@ -1481,6 +1486,47 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
     );
   }
 
+  void _copyPrompt() {
+    final deck = _getCurrentDeck();
+    List<FlashcardCard> cardsToCopy;
+    if (_selectedCardIds.isNotEmpty) {
+      // Keep order matching current filtered & sorted cards
+      cardsToCopy = _filteredSortedCards
+          .where((card) => _selectedCardIds.contains(card.id))
+          .toList();
+    } else {
+      cardsToCopy = _filteredSortedCards;
+    }
+
+    if (cardsToCopy.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tidak ada kata untuk dibuatkan prompt.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    final prompt = PromptService.generatePrompt(
+      cards: cardsToCopy,
+      deck: deck,
+    );
+
+    Clipboard.setData(ClipboardData(text: prompt));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          _selectedCardIds.isNotEmpty
+              ? 'Prompt berhasil disalin untuk ${_selectedCardIds.length} kata terpilih!'
+              : 'Prompt berhasil disalin untuk ${cardsToCopy.length} kata!',
+        ),
+        duration: const Duration(seconds: 2),
+        backgroundColor: Colors.green,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isCustomDb = _isCustomDatabase();
@@ -1520,6 +1566,27 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
               const SizedBox(width: 8),
             ],
           ],
+          // Copy Prompt button
+          Tooltip(
+            message: _selectedCardIds.isNotEmpty
+                ? 'Copy Prompt (${_selectedCardIds.length} baris terpilih)'
+                : 'Copy Prompt (Semua ${_filteredSortedCards.length} baris preview)',
+            child: ElevatedButton.icon(
+              onPressed: _copyPrompt,
+              icon: const Icon(Icons.copy_rounded, size: 18),
+              label: Text(
+                _selectedCardIds.isNotEmpty
+                    ? 'Copy Prompt (${_selectedCardIds.length})'
+                    : 'Copy Prompt',
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _selectedCardIds.isNotEmpty ? Colors.green[700] : Colors.blueAccent,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
           // Deleted Data button for ALL datasets (Icon + Count only)
           Tooltip(
             message: 'Deleted Data (${deck?.deletedCards.length ?? 0} item)',
@@ -2138,6 +2205,46 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                 ),
               ],
             ),
+            if (_selectedCardIds.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.green.withValues(alpha: 0.4)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.check_circle, color: Colors.green, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${_selectedCardIds.length} baris dipilih untuk Copy Prompt',
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 13),
+                    ),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          for (final c in pageCards) {
+                            _selectedCardIds.add(c.id);
+                          }
+                        });
+                      },
+                      child: const Text('Pilih Halaman Ini', style: TextStyle(fontSize: 12)),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _selectedCardIds.clear();
+                        });
+                      },
+                      child: const Text('Batal Pilih', style: TextStyle(fontSize: 12, color: Colors.redAccent)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             if (pageCards.isEmpty)
               const Padding(
@@ -2153,6 +2260,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: DataTable(
+                  showCheckboxColumn: false,
                   sortColumnIndex: _sortColumnIndex,
                   sortAscending: _sortAscending,
                   columnSpacing: 24.0,
@@ -2195,10 +2303,70 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
     final originalNo = _cardOriginalNumbers[card.id] ?? absoluteIndex;
     final columns = card.allColumns;
     final isCustomDb = _isCustomDatabase();
+    final isSelected = _selectedCardIds.contains(card.id);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return DataRow(
+      color: WidgetStateProperty.resolveWith<Color?>((states) {
+        if (isSelected) return Colors.green.withValues(alpha: 0.15);
+        return null;
+      }),
       cells: [
-        DataCell(Text(originalNo.toString())),
+        DataCell(
+          Tooltip(
+            message: _selectedCardIds.isEmpty
+                ? 'Tekan lama untuk mengaktifkan mode pilih'
+                : (isSelected ? 'Klik untuk batal pilih' : 'Klik untuk memilih baris'),
+            child: InkWell(
+              onLongPress: () {
+                setState(() {
+                  if (isSelected) {
+                    _selectedCardIds.remove(card.id);
+                  } else {
+                    _selectedCardIds.add(card.id);
+                  }
+                });
+              },
+              onTap: () {
+                if (_selectedCardIds.isNotEmpty) {
+                  setState(() {
+                    if (isSelected) {
+                      _selectedCardIds.remove(card.id);
+                    } else {
+                      _selectedCardIds.add(card.id);
+                    }
+                  });
+                }
+              },
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                width: 36,
+                height: 36,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? const Color(0xFF4CAF50)
+                      : (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05)),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isSelected
+                        ? const Color(0xFF4CAF50)
+                        : (isDark ? Colors.white24 : Colors.black12),
+                    width: 1.5,
+                  ),
+                ),
+                child: Text(
+                  originalNo.toString(),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
         for (int i = 0; i < widget.columnHeaders.length; i++)
           DataCell(
             ConstrainedBox(
