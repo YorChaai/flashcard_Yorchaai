@@ -2220,11 +2220,15 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                   children: [
                     const Icon(Icons.check_circle, color: Colors.green, size: 18),
                     const SizedBox(width: 8),
-                    Text(
-                      '${_selectedCardIds.length} baris dipilih untuk Copy Prompt',
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 13),
+                    Expanded(
+                      child: Text(
+                        '${_selectedCardIds.length} baris dipilih',
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 13),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
                     ),
-                    const Spacer(),
+                    const SizedBox(width: 4),
                     IconButton(
                       icon: const Icon(Icons.close, size: 18, color: Colors.redAccent),
                       tooltip: 'Batal Pilih (${_selectedCardIds.length})',
