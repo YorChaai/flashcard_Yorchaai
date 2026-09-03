@@ -448,6 +448,7 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
     context.read<LearningSessionProvider>().startSession(
           processedCards,
           OrderMode.normal,
+          deckId: deck.id,
         );
 
     Navigator.push(

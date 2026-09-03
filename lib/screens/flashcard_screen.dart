@@ -183,13 +183,21 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () {
-                      sessionProvider.markKnown(false, onCardUpdated: (updatedCard) {
-                        final deckProvider = context.read<DeckProvider>();
-                        if (deckProvider.selectedDeck != null) {
-                          deckProvider.updateCardInDeck(deckProvider.selectedDeck!.id, updatedCard);
-                        }
-                      });
-                      _showNextCardOrResult(sessionProvider);
+                      // Tidak Tahu: reset display → 1 kolom, record, maju ke NEXT
+                      _animationController.reset();
+                      setState(() => _isShowingBack = false);
+                      if (isLastCard) {
+                        sessionProvider.markKnown(false, onCardUpdated: (c) {
+                          final dp = context.read<DeckProvider>();
+                          if (dp.selectedDeck != null) dp.updateCardInDeck(dp.selectedDeck!.id, c);
+                        });
+                        _goToResultScreen();
+                      } else {
+                        sessionProvider.markKnownAndNext(false, onCardUpdated: (c) {
+                          final dp = context.read<DeckProvider>();
+                          if (dp.selectedDeck != null) dp.updateCardInDeck(dp.selectedDeck!.id, c);
+                        });
+                      }
                     },
                     icon: const Icon(Icons.close),
                     label: const Text('Tidak Tahu'),
@@ -204,13 +212,21 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () {
-                      sessionProvider.markKnown(true, onCardUpdated: (updatedCard) {
-                        final deckProvider = context.read<DeckProvider>();
-                        if (deckProvider.selectedDeck != null) {
-                          deckProvider.updateCardInDeck(deckProvider.selectedDeck!.id, updatedCard);
-                        }
-                      });
-                      _showNextCardOrResult(sessionProvider);
+                      // Tahu: reset display → 1 kolom, record, maju ke NEXT
+                      _animationController.reset();
+                      setState(() => _isShowingBack = false);
+                      if (isLastCard) {
+                        sessionProvider.markKnown(true, onCardUpdated: (c) {
+                          final dp = context.read<DeckProvider>();
+                          if (dp.selectedDeck != null) dp.updateCardInDeck(dp.selectedDeck!.id, c);
+                        });
+                        _goToResultScreen();
+                      } else {
+                        sessionProvider.markKnownAndNext(true, onCardUpdated: (c) {
+                          final dp = context.read<DeckProvider>();
+                          if (dp.selectedDeck != null) dp.updateCardInDeck(dp.selectedDeck!.id, c);
+                        });
+                      }
                     },
                     icon: const Icon(Icons.check),
                     label: const Text('Tahu'),
@@ -235,12 +251,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                   child: OutlinedButton.icon(
                     onPressed: sessionProvider.currentIndex > 0
                         ? () {
-                            if (_isShowingBack) {
-                              _animationController.reset();
-                              setState(() {
-                                _isShowingBack = false;
-                              });
-                            }
+                            // Previous: KEEP current display mode as-is
                             sessionProvider.previousCard();
                           }
                         : null,
@@ -256,6 +267,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                   child: OutlinedButton.icon(
                     onPressed: () {
                       if (isLastCard) {
+                        // Finish on last card: go to result (no skip increment; handled per-card)
                         Navigator.pushReplacement(
                           context,
                           MaterialPageRoute(
@@ -264,12 +276,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                           ),
                         );
                       } else {
-                        if (_isShowingBack) {
-                          _animationController.reset();
-                          setState(() {
-                            _isShowingBack = false;
-                          });
-                        }
+                        // Next: KEEP current display mode as-is
                         sessionProvider.nextCard();
                       }
                     },
@@ -294,28 +301,15 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     );
   }
 
-  void _showNextCardOrResult(
-    LearningSessionProvider sessionProvider,
-  ) {
-    if (sessionProvider.currentIndex < sessionProvider.totalCards - 1) {
-      // Reset flip animation
-      _animationController.reset();
-      setState(() {
-        _isShowingBack = false;
-      });
-      sessionProvider.nextCard();
-    } else {
-      // Navigate immediately without reset on last card
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => const ResultScreen(),
-            settings: const RouteSettings(name: 'ResultScreen'),
-          ),
-        );
-      }
-    }
+  void _goToResultScreen() {
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const ResultScreen(),
+        settings: const RouteSettings(name: 'ResultScreen'),
+      ),
+    );
   }
 
   Widget _buildCardFront(flashcard_models.FlashcardCard card) {

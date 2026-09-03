@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_providers.dart';
 import 'home_screen.dart';
+import 'deck_detail_screen.dart';
 
 class ResultScreen extends StatelessWidget {
   const ResultScreen({super.key});
@@ -72,6 +73,12 @@ class ResultScreen extends StatelessWidget {
                           value: sessionProvider.unknownCount.toString(),
                           color: Colors.red,
                         ),
+                        _StatItem(
+                          icon: Icons.skip_next,
+                          label: 'Skip',
+                          value: sessionProvider.skipCount.toString(),
+                          color: Colors.orange,
+                        ),
                       ],
                     ),
 
@@ -131,14 +138,36 @@ class ResultScreen extends StatelessWidget {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () {
-                      // Reset session to allow starting fresh
+                      // Retrieve the deck ID BEFORE resetting the session
+                      final savedDeckId = sessionProvider.currentDeckId;
+
+                      // Reset session state
                       sessionProvider.resetSession();
 
-                      // Navigate back to the first non-Flashcard/Result screen (DeckDetailScreen)
-                      Navigator.of(context).popUntil((route) {
-                        final name = route.settings.name ?? '';
-                        return name != 'FlashcardScreen' && name != 'ResultScreen';
-                      });
+                      if (savedDeckId != null) {
+                        // Navigate deterministically: go to HomeScreen then
+                        // immediately open the DeckDetailScreen for the saved deck.
+                        final deckProvider = context.read<DeckProvider>();
+                        final deck = deckProvider.decks.firstWhere(
+                          (d) => d.id == savedDeckId,
+                          orElse: () => deckProvider.decks.first,
+                        );
+                        deckProvider.selectDeck(deck);
+
+                        Navigator.of(context).pushAndRemoveUntil(
+                          MaterialPageRoute(
+                            builder: (context) => const DeckDetailScreen(),
+                            settings: const RouteSettings(name: 'DeckDetailScreen'),
+                          ),
+                          (route) => route.isFirst,
+                        );
+                      } else {
+                        // Fallback: pop until reaching DeckDetailScreen
+                        Navigator.of(context).popUntil((route) {
+                          final name = route.settings.name ?? '';
+                          return name != 'FlashcardScreen' && name != 'ResultScreen';
+                        });
+                      }
                     },
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),

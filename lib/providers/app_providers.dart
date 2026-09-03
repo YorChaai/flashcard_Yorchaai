@@ -807,9 +807,16 @@ class DeckProvider extends ChangeNotifier {
 class LearningSessionProvider extends ChangeNotifier {
   List<FlashcardCard> _sessionCards = [];
   int _currentIndex = 0;
-  int _knownCount = 0;
   OrderMode _orderMode = OrderMode.normal;
   bool _isFlipped = false;
+
+  // Track which cards have been answered Known or Unknown this session.
+  // A card answered multiple times only counts once (last answer wins).
+  final Set<String> _knownCardIds = {};
+  final Set<String> _unknownCardIds = {};
+
+  // Store the deck ID so Review Again always reopens the correct deck.
+  String? _currentDeckId;
 
   int get currentIndex => _currentIndex;
   int get totalCards => _sessionCards.length;
@@ -818,17 +825,28 @@ class LearningSessionProvider extends ChangeNotifier {
   OrderMode get orderMode => _orderMode;
   bool get isFlipped => _isFlipped;
   List<FlashcardCard> get sessionCards => _sessionCards;
+  String? get currentDeckId => _currentDeckId;
 
-  int get knownCount => _knownCount;
-  int get unknownCount => _sessionCards.length - _knownCount;
+  int get knownCount => _knownCardIds.length;
+  int get unknownCount => _unknownCardIds.length;
+
+  /// Cards never answered with Known or Unknown in this session = skipped.
+  int get skipCount {
+    final answered = {..._knownCardIds, ..._unknownCardIds};
+    return _sessionCards.map((c) => c.id).toSet().difference(answered).length;
+  }
+
   double get progressPercent =>
-      totalCards > 0 ? (_knownCount / totalCards) * 100 : 0;
+      totalCards > 0 ? (knownCount / totalCards) * 100 : 0;
 
-  void startSession(List<FlashcardCard> cards, OrderMode mode) {
+  void startSession(List<FlashcardCard> cards, OrderMode mode, {String? deckId}) {
+    _knownCardIds.clear();
+    _unknownCardIds.clear();
+    _currentDeckId = deckId;
+
     if (cards.isEmpty) {
       _sessionCards = [];
       _currentIndex = 0;
-      _knownCount = 0;
       _orderMode = mode;
       _isFlipped = false;
       notifyListeners();
@@ -836,12 +854,8 @@ class LearningSessionProvider extends ChangeNotifier {
     }
 
     var filtered = List<FlashcardCard>.from(cards);
-    _knownCount = filtered.where((card) => card.known).length;
-
-    // Apply order mode
     switch (mode) {
       case OrderMode.normal:
-        // Original order (as in Excel)
         break;
       case OrderMode.reverse:
         filtered = filtered.reversed.toList();
@@ -868,52 +882,69 @@ class LearningSessionProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Next: moves forward. Display mode managed by UI.
   void nextCard() {
     if (_currentIndex < _sessionCards.length - 1) {
       _currentIndex++;
-      _isFlipped = false;
       notifyListeners();
     }
   }
 
+  /// Previous: moves backward. Display mode managed by UI.
   void previousCard() {
     if (_currentIndex > 0) {
       _currentIndex--;
-      _isFlipped = false;
       notifyListeners();
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Single-notify mark + navigate (eliminates rebuild lag)
+  // ---------------------------------------------------------------------------
+
+  /// For the LAST card: records the answer without navigating.
   void markKnown(bool known, {Function(FlashcardCard)? onCardUpdated}) {
-    if (currentCard != null) {
-      final wasKnown = _sessionCards[_currentIndex].known;
-      final currentScore = _sessionCards[_currentIndex].score;
-      final newScore = known ? currentScore + 1 : currentScore - 1;
+    if (currentCard == null) return;
+    final answered = _applyMark(known);
+    notifyListeners();
+    if (onCardUpdated != null) onCardUpdated(answered);
+  }
 
-      _sessionCards[_currentIndex] = _sessionCards[_currentIndex].copyWith(
-        known: known,
-        score: newScore,
-      );
-      
-      // Update cached knownCount
-      if (known && !wasKnown) {
-        _knownCount++;
-      } else if (!known && wasKnown) {
-        _knownCount--;
-      }
+  /// Records Known or Unknown, then advances to the NEXT card — all in ONE
+  /// notifyListeners() call to avoid lag.
+  ///
+  /// Both Tahu and Tidak Tahu go forward (+1). Only Previous goes backward.
+  void markKnownAndNext(bool known, {Function(FlashcardCard)? onCardUpdated}) {
+    if (currentCard == null) return;
+    final answered = _applyMark(known);
+    if (_currentIndex < _sessionCards.length - 1) _currentIndex++;
+    notifyListeners(); // single rebuild covers both mark + index change
+    if (onCardUpdated != null) onCardUpdated(answered); // fire-and-forget
+  }
 
-      if (onCardUpdated != null) {
-        onCardUpdated(_sessionCards[_currentIndex]);
-      }
-
-      notifyListeners();
+  FlashcardCard _applyMark(bool known) {
+    final idx = _currentIndex;
+    final cardId = _sessionCards[idx].id;
+    final newScore = known
+        ? _sessionCards[idx].score + 1
+        : _sessionCards[idx].score - 1;
+    _sessionCards[idx] =
+        _sessionCards[idx].copyWith(known: known, score: newScore);
+    if (known) {
+      _knownCardIds.add(cardId);
+      _unknownCardIds.remove(cardId);
+    } else {
+      _unknownCardIds.add(cardId);
+      _knownCardIds.remove(cardId);
     }
+    return _sessionCards[idx];
   }
 
   void resetSession() {
     _sessionCards = [];
     _currentIndex = 0;
-    _knownCount = 0;
+    _knownCardIds.clear();
+    _unknownCardIds.clear();
     _isFlipped = false;
     notifyListeners();
   }
