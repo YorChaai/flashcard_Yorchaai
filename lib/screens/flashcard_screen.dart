@@ -348,9 +348,62 @@ class _FlashcardScreenState extends State<FlashcardScreen>
         Positioned(
           top: 16,
           right: 16,
-          child: _buildScoreBadge(card.score),
+          child: _buildScoreAndPracticeAction(card),
         ),
       ],
+    );
+  }
+
+  Widget _buildScoreAndPracticeAction(flashcard_models.FlashcardCard card) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Tooltip(
+          message: 'Latihan Menulis',
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: () => _showWritingPracticeDialog(context, card),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: Colors.amber.shade700.withValues(alpha: 0.6),
+                    width: 1.2,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.edit_note_rounded,
+                      size: 20,
+                      color: Colors.amber.shade800,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        _buildScoreBadge(card.score),
+      ],
+    );
+  }
+
+  void _showWritingPracticeDialog(
+    BuildContext context,
+    flashcard_models.FlashcardCard card,
+  ) {
+    final expectedWord = card.columns.isNotEmpty ? card.columns[0] : '';
+
+    showDialog(
+      context: context,
+      builder: (context) => _WritingPracticeDialog(expectedWord: expectedWord),
     );
   }
 
@@ -441,7 +494,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
         Positioned(
           top: 16,
           right: 16,
-          child: _buildScoreBadge(card.score),
+          child: _buildScoreAndPracticeAction(card),
         ),
       ],
     );
@@ -517,5 +570,212 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     }
 
     return Column(children: rows);
+  }
+}
+
+class _WritingPracticeDialog extends StatefulWidget {
+  final String expectedWord;
+
+  const _WritingPracticeDialog({required this.expectedWord});
+
+  @override
+  State<_WritingPracticeDialog> createState() => _WritingPracticeDialogState();
+}
+
+class _WritingPracticeDialogState extends State<_WritingPracticeDialog> {
+  final TextEditingController _controller = TextEditingController();
+  bool? _isCorrect;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _checkAnswer() {
+    final input = _controller.text.trim();
+    final expected = widget.expectedWord.trim();
+
+    setState(() {
+      _isCorrect = input == expected;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Header: Judul & Tombol Close (X)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.edit_note,
+                        color: Theme.of(context).primaryColor,
+                        size: 24,
+                      ),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Latihan Menulis',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onPressed: () => Navigator.pop(context),
+                    tooltip: 'Tutup',
+                  ),
+                ],
+              ),
+              const Divider(height: 24),
+
+              // Target Word display
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.grey[850]
+                      : Colors.grey[100],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Theme.of(context).dividerColor.withValues(alpha: 0.2),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      'Kata yang harus ditulis:',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      widget.expectedWord,
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Input field (Unicode compliant, auto-focus)
+              TextField(
+                controller: _controller,
+                autofocus: true,
+                decoration: InputDecoration(
+                  labelText: 'Ketik kata di sini...',
+                  hintText: 'Tuliskan jawaban...',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
+                ),
+                onSubmitted: (_) => _checkAnswer(),
+                onChanged: (_) {
+                  if (_isCorrect != null) {
+                    setState(() => _isCorrect = null);
+                  }
+                },
+              ),
+              const SizedBox(height: 12),
+
+              // Feedback status
+              if (_isCorrect != null) ...[
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: _isCorrect!
+                        ? Colors.green.withValues(alpha: 0.1)
+                        : Colors.red.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: _isCorrect! ? Colors.green : Colors.red,
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _isCorrect! ? Icons.check_circle : Icons.cancel,
+                        color: _isCorrect! ? Colors.green : Colors.red,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _isCorrect! ? 'Benar' : 'Salah, coba lagi',
+                          style: TextStyle(
+                            color: _isCorrect! ? Colors.green[800] : Colors.red[800],
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              // Action buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: const Text('Tutup'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _checkAnswer,
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: const Text('Cek Jawaban'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

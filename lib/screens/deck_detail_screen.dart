@@ -8,6 +8,7 @@ import '../models/deck.dart';
 import '../models/font_size_settings.dart';
 import '../models/flashcard_card.dart';
 import '../services/storage_service.dart';
+import '../utils/deck_column_helper.dart';
 import 'flashcard_screen.dart';
 import 'learning_preview_screen.dart';
 
@@ -46,8 +47,11 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
       final deck = provider.selectedDeck;
       if (deck != null) {
         final config = provider.getDeckConfig(deck.id);
-        _fromController.text = (config.rangeStart ?? deck.lastLearningRangeStart ?? 1).toString();
-        _toController.text = (config.rangeEnd ?? deck.lastLearningRangeEnd ?? deck.totalCards).toString();
+        _fromController.text =
+            (config.rangeStart ?? deck.lastLearningRangeStart ?? 1).toString();
+        _toController.text =
+            (config.rangeEnd ?? deck.lastLearningRangeEnd ?? deck.totalCards)
+                .toString();
         _selectedMode = config.orderMode;
         _rangeInitialized = true;
       }
@@ -59,9 +63,7 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
     final deck = context.watch<DeckProvider>().selectedDeck;
 
     if (deck == null) {
-      return const Scaffold(
-        body: Center(child: Text('No deck selected')),
-      );
+      return const Scaffold(body: Center(child: Text('No deck selected')));
     }
 
     // Fix for when starting from 0 cards
@@ -174,20 +176,25 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
             // Active Dataset Selector
             const Text(
               'Active Dataset',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
             Card(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 4,
+                ),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<Deck>(
                     isExpanded: true,
-                    value: context.watch<DeckProvider>().decks.any((d) => d.id == deck.id)
-                        ? context.watch<DeckProvider>().decks.firstWhere((d) => d.id == deck.id)
+                    value:
+                        context.watch<DeckProvider>().decks.any(
+                          (d) => d.id == deck.id,
+                        )
+                        ? context.watch<DeckProvider>().decks.firstWhere(
+                            (d) => d.id == deck.id,
+                          )
                         : deck,
                     items: context.watch<DeckProvider>().decks.map((d) {
                       return DropdownMenuItem(
@@ -206,8 +213,16 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                         StorageService().setLastSelectedDeckId(newDeck.id);
                         final config = provider.getDeckConfig(newDeck.id);
                         setState(() {
-                          _fromController.text = (config.rangeStart ?? newDeck.lastLearningRangeStart ?? 1).toString();
-                          _toController.text = (config.rangeEnd ?? newDeck.lastLearningRangeEnd ?? newDeck.totalCards).toString();
+                          _fromController.text =
+                              (config.rangeStart ??
+                                      newDeck.lastLearningRangeStart ??
+                                      1)
+                                  .toString();
+                          _toController.text =
+                              (config.rangeEnd ??
+                                      newDeck.lastLearningRangeEnd ??
+                                      newDeck.totalCards)
+                                  .toString();
                           _selectedMode = config.orderMode;
                         });
                       }
@@ -221,10 +236,7 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
 
             const Text(
               'Learning Range',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
 
@@ -252,7 +264,10 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                           icon: const Icon(Icons.preview, size: 20),
                           label: const Text('Library Preview'),
                           style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
                             minimumSize: Size.zero,
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
@@ -302,10 +317,7 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
 
             const Text(
               'Order Mode',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
 
@@ -418,7 +430,7 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
 
     if (from < 1) from = 1;
     if (from > deck.totalCards) from = deck.totalCards;
-    
+
     if (to < 1) to = 1;
     if (to > deck.totalCards) to = deck.totalCards;
 
@@ -427,7 +439,7 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
       from = to;
       to = temp;
     }
-    
+
     _fromController.text = from.toString();
     _toController.text = to.toString();
 
@@ -439,17 +451,21 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
     );
     provider.updateDeckConfig(config);
 
-    final processedCards = provider.getProcessedCards(deck, config, applyOrderMode: true);
+    final processedCards = provider.getProcessedCards(
+      deck,
+      config,
+      applyOrderMode: true,
+    );
     if (processedCards.isEmpty) {
       _showRangeError('Tidak ada data pada range / filter yang dipilih.');
       return;
     }
 
     context.read<LearningSessionProvider>().startSession(
-          processedCards,
-          OrderMode.normal,
-          deckId: deck.id,
-        );
+      processedCards,
+      OrderMode.normal,
+      deckId: deck.id,
+    );
 
     Navigator.push(
       context,
@@ -468,7 +484,7 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
 
     if (from < 1) from = 1;
     if (from > deck.totalCards) from = deck.totalCards;
-    
+
     if (to < 1) to = 1;
     if (to > deck.totalCards) to = deck.totalCards;
 
@@ -503,7 +519,8 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
       final updatedConfig = provider.getDeckConfig(deck.id);
       setState(() {
         _fromController.text = (updatedConfig.rangeStart ?? 1).toString();
-        _toController.text = (updatedConfig.rangeEnd ?? deck.totalCards).toString();
+        _toController.text = (updatedConfig.rangeEnd ?? deck.totalCards)
+            .toString();
         _selectedMode = updatedConfig.orderMode;
       });
     });
@@ -511,10 +528,7 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
 
   void _showRangeError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-      ),
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
     );
   }
 
@@ -579,49 +593,72 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                           ),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
                           decoration: BoxDecoration(
-                            color: Theme.of(context).brightness == Brightness.dark 
-                                ? Colors.grey[800] 
+                            color:
+                                Theme.of(context).brightness == Brightness.dark
+                                ? Colors.grey[800]
                                 : Colors.grey[200],
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                              color: Theme.of(context).brightness == Brightness.dark 
-                                  ? Colors.grey[700]! 
+                              color:
+                                  Theme.of(context).brightness ==
+                                      Brightness.dark
+                                  ? Colors.grey[700]!
                                   : Colors.grey[300]!,
                             ),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text('Show: ', 
-                                  style: TextStyle(
-                                    fontSize: 12, 
-                                    color: Theme.of(context).brightness == Brightness.dark 
-                                        ? Colors.white70 
-                                        : Colors.black87
-                                  )),
+                              Text(
+                                'Show: ',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color:
+                                      Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? Colors.white70
+                                      : Colors.black87,
+                                ),
+                              ),
                               DropdownButtonHideUnderline(
                                 child: DropdownButton<int>(
-                                  dropdownColor: Theme.of(context).brightness == Brightness.dark 
-                                      ? Colors.grey[800] 
+                                  dropdownColor:
+                                      Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? Colors.grey[800]
                                       : Colors.white,
                                   value: visibleColumnCount,
                                   isDense: true,
                                   iconSize: 18,
-                                  iconEnabledColor: Theme.of(context).brightness == Brightness.dark 
-                                      ? Colors.white 
+                                  iconEnabledColor:
+                                      Theme.of(context).brightness ==
+                                          Brightness.dark
+                                      ? Colors.white
                                       : Colors.black,
                                   style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,
-                                    color: Theme.of(context).brightness == Brightness.dark 
-                                        ? Colors.white 
+                                    color:
+                                        Theme.of(context).brightness ==
+                                            Brightness.dark
+                                        ? Colors.white
                                         : Colors.black,
                                   ),
-                                  items: List.generate(deck.columnCount, (i) => i + 1).map((val) {
-                                    return DropdownMenuItem(value: val, child: Text('$val'));
-                                  }).toList(),
+                                  items:
+                                      List.generate(
+                                        deck.columnCount,
+                                        (i) => i + 1,
+                                      ).map((val) {
+                                        return DropdownMenuItem(
+                                          value: val,
+                                          child: Text('$val'),
+                                        );
+                                      }).toList(),
                                   onChanged: (val) {
                                     if (val != null) {
                                       setDialogState(() {
@@ -664,9 +701,15 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                           return ListTile(
                             key: ValueKey('column_order_${columnOrder[idx]}'),
                             dense: true,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 2,
+                            ),
                             leading: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.blue.withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(6),
@@ -682,9 +725,15 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                             ),
                             title: Text(
                               headerName,
-                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
                             ),
-                            trailing: const Icon(Icons.drag_handle, color: Colors.grey),
+                            trailing: const Icon(
+                              Icons.drag_handle,
+                              color: Colors.grey,
+                            ),
                           );
                         },
                       ),
@@ -692,96 +741,139 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
 
                     const SizedBox(height: 24),
 
-                  Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      const Text(
-                        'Font Size Settings',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: Theme.of(context).primaryColor),
-                        ),
-                        child: Text(
-                          FontSizeSettings.getCurrentPlatformLabel(),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).primaryColor,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey[300]!),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Column(
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      runSpacing: 8,
                       children: [
-                        TextField(
-                          controller: fontSize1Controller,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
-                          decoration: const InputDecoration(
-                            labelText: 'Kolom 1 (Atas Tengah)',
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        const Text(
+                          'Font Size Settings',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: fontSize23Controller,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
-                          decoration: const InputDecoration(
-                            labelText: 'Kolom 2 & 3',
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: fontSize45Controller,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
-                          decoration: const InputDecoration(
-                            labelText: 'Kolom 4 & 5',
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Theme.of(
+                              context,
+                            ).primaryColor.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: Theme.of(context).primaryColor,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: fontSize6Controller,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
-                          decoration: const InputDecoration(
-                            labelText: 'Kolom 6 (Bawah)',
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          child: Text(
+                            FontSizeSettings.getCurrentPlatformLabel(),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).primaryColor,
+                            ),
                           ),
                         ),
                       ],
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        children: [
+                          TextField(
+                            controller: fontSize1Controller,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'^\d*\.?\d*'),
+                              ),
+                            ],
+                            decoration: const InputDecoration(
+                              labelText: 'Kolom 1 (Atas Tengah)',
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: fontSize23Controller,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'^\d*\.?\d*'),
+                              ),
+                            ],
+                            decoration: const InputDecoration(
+                              labelText: 'Kolom 2 & 3',
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: fontSize45Controller,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'^\d*\.?\d*'),
+                              ),
+                            ],
+                            decoration: const InputDecoration(
+                              labelText: 'Kolom 4 & 5',
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: fontSize6Controller,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'^\d*\.?\d*'),
+                              ),
+                            ],
+                            decoration: const InputDecoration(
+                              labelText: 'Kolom 6 (Bawah)',
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          actions: [
+            actions: [
               TextButton(
                 onPressed: () {
                   Navigator.pop(context);
@@ -791,10 +883,18 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
               ElevatedButton(
                 onPressed: () async {
                   // Parse font sizes - support both int and float input
-                  final double? newSize1 = parseFontSize(fontSize1Controller.text);
-                  final double? newSize23 = parseFontSize(fontSize23Controller.text);
-                  final double? newSize45 = parseFontSize(fontSize45Controller.text);
-                  final double? newSize6 = parseFontSize(fontSize6Controller.text);
+                  final double? newSize1 = parseFontSize(
+                    fontSize1Controller.text,
+                  );
+                  final double? newSize23 = parseFontSize(
+                    fontSize23Controller.text,
+                  );
+                  final double? newSize45 = parseFontSize(
+                    fontSize45Controller.text,
+                  );
+                  final double? newSize6 = parseFontSize(
+                    fontSize6Controller.text,
+                  );
 
                   // Validate font sizes
                   if ((newSize1 != null && newSize1 <= 0) ||
@@ -819,10 +919,14 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                   FontSizeSettings updatedSettings;
                   if (FontSizeSettings.isMobilePlatform()) {
                     updatedSettings = currentSettings.copyWith(
-                      mobileFontSize1: newSize1 ?? currentSettings.mobileFontSize1,
-                      mobileFontSize23: newSize23 ?? currentSettings.mobileFontSize23,
-                      mobileFontSize45: newSize45 ?? currentSettings.mobileFontSize45,
-                      mobileFontSize6: newSize6 ?? currentSettings.mobileFontSize6,
+                      mobileFontSize1:
+                          newSize1 ?? currentSettings.mobileFontSize1,
+                      mobileFontSize23:
+                          newSize23 ?? currentSettings.mobileFontSize23,
+                      mobileFontSize45:
+                          newSize45 ?? currentSettings.mobileFontSize45,
+                      mobileFontSize6:
+                          newSize6 ?? currentSettings.mobileFontSize6,
                     );
                   } else {
                     updatedSettings = currentSettings.copyWith(
@@ -842,7 +946,9 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                   for (int i = 0; i < columnOrder.length; i++) {
                     if (columnOrder[i] != i) {
                       // Find where column i currently is
-                      final findIndex = columnOrder.indexWhere((idx) => idx == i);
+                      final findIndex = columnOrder.indexWhere(
+                        (idx) => idx == i,
+                      );
                       if (findIndex != -1 && findIndex != i) {
                         // Swap in columnOrder array
                         final temp = columnOrder[i];
@@ -855,7 +961,9 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                   }
 
                   // Save deck (column order and visible count changes)
-                  updatedDeck = updatedDeck.copyWith(visibleColumnCount: visibleColumnCount);
+                  updatedDeck = updatedDeck.copyWith(
+                    visibleColumnCount: visibleColumnCount,
+                  );
                   await deckProvider.updateDeck(updatedDeck);
 
                   // Check if context is still mounted before using it
@@ -886,145 +994,368 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
   }
 
   void _showAddCardDialog(BuildContext context, Deck currentDeck) {
-    final kataController = TextEditingController();
-    final artiController = TextEditingController();
-    final deckProvider = context.read<DeckProvider>();
-    final availableDecks = deckProvider.decks.where((d) => d.id != currentDeck.id).toList();
     showDialog(
       context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: const Text('Tambah Kata Baru'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: kataController,
-                      decoration: const InputDecoration(
-                        labelText: 'Kata',
-                        border: OutlineInputBorder(),
-                      ),
-                      autofocus: true,
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: artiController,
-                      decoration: const InputDecoration(
-                        labelText: 'Arti',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    final kata = kataController.text.trim();
-                    final arti = artiController.text.trim();
-                    if (kata.isEmpty) return;
-
-                    List<String> newHeaders = List.from(currentDeck.columnHeaders);
-                    if (newHeaders.length < 2) {
-                      newHeaders = ['Kata', 'Arti'];
-                    }
-
-                    Deck targetDeck = currentDeck;
-                    bool foundAny = false;
-
-                    for (final deck in availableDecks) {
-                      FlashcardCard? matchInDeck;
-                      for (final card in deck.cards) {
-                        if (card.columns.any((col) => col.toLowerCase().trim() == kata.toLowerCase())) {
-                          matchInDeck = card;
-                          break;
-                        }
-                      }
-
-                      if (matchInDeck != null) {
-                        foundAny = true;
-                        
-                        List<String> newColumns = [kata, arti, deck.name]; // Source file di kolom ke-3
-                        newColumns.addAll(matchInDeck.columns);
-                        
-                        int requiredCols = newColumns.length;
-                        
-                        // Perluas headers jika perlu
-                        for (int i = newHeaders.length; i < requiredCols; i++) {
-                          if (i == 2) {
-                            newHeaders.add('Source File');
-                          } else {
-                            if (i - 3 >= 0 && i - 3 < deck.columnHeaders.length) {
-                              newHeaders.add(deck.columnHeaders[i - 3]);
-                            } else {
-                              newHeaders.add('Col ${i + 1}');
-                            }
-                          }
-                        }
-
-                        // Samakan jumlah kolom dengan deck utama
-                        if (newColumns.length > targetDeck.columnCount) {
-                           targetDeck = targetDeck.upgradeColumnCount(newColumns.length, newHeaders);
-                        } else if (newColumns.length < targetDeck.columnCount) {
-                           while(newColumns.length < targetDeck.columnCount) {
-                             newColumns.add('');
-                           }
-                        }
-
-                        final newCard = FlashcardCard(columns: newColumns);
-                        targetDeck = targetDeck.addCard(newCard);
-                      }
-                    }
-
-                    // Jika tidak ditemukan di file manapun
-                    if (!foundAny) {
-                        List<String> newColumns = [kata, arti, 'Manual/Custom']; // Pastikan ada kolom ke-3
-                        
-                        int requiredCols = newColumns.length;
-                        for (int i = newHeaders.length; i < requiredCols; i++) {
-                          if (i == 2) {
-                            newHeaders.add('Source File');
-                          } else {
-                            newHeaders.add('Col ${i + 1}');
-                          }
-                        }
-
-                        if (newColumns.length > targetDeck.columnCount) {
-                           targetDeck = targetDeck.upgradeColumnCount(newColumns.length, newHeaders);
-                        } else if (newColumns.length < targetDeck.columnCount) {
-                           while(newColumns.length < targetDeck.columnCount) {
-                             newColumns.add('');
-                           }
-                        }
-                        
-                        final newCard = FlashcardCard(columns: newColumns);
-                        targetDeck = targetDeck.addCard(newCard);
-                    }
-
-                    await deckProvider.updateDeck(targetDeck);
-
-                    if (context.mounted) {
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Kata "$kata" berhasil ditambahkan!')),
-                      );
-                    }
-                  },
-                  child: const Text('Save'),
-                ),
-              ],
-            );
-          }
-        );
-      },
+      builder: (dialogContext) => _AddCustomCardDialog(currentDeck: currentDeck),
     );
   }
 }
 
+class _AddCustomCardDialog extends StatefulWidget {
+  final Deck currentDeck;
+
+  const _AddCustomCardDialog({required this.currentDeck});
+
+  @override
+  State<_AddCustomCardDialog> createState() => _AddCustomCardDialogState();
+}
+
+class _AddCustomCardRowItem {
+  final Key key;
+  final TextEditingController kataController;
+  final TextEditingController artiController;
+  bool hasError = false;
+
+  _AddCustomCardRowItem({
+    required this.key,
+    required this.kataController,
+    required this.artiController,
+  });
+
+  void dispose() {
+    kataController.dispose();
+    artiController.dispose();
+  }
+}
+
+class _AddCustomCardDialogState extends State<_AddCustomCardDialog> {
+  static const int maxRows = 20;
+  final List<_AddCustomCardRowItem> _rows = [];
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _addRow();
+  }
+
+  void _addRow() {
+    if (_rows.length >= maxRows) return;
+    setState(() {
+      _rows.add(_AddCustomCardRowItem(
+        key: UniqueKey(),
+        kataController: TextEditingController(),
+        artiController: TextEditingController(),
+      ));
+    });
+  }
+
+  void _removeRow(int index) {
+    if (_rows.length <= 1) return;
+    setState(() {
+      final removed = _rows.removeAt(index);
+      removed.dispose();
+    });
+  }
+
+  @override
+  void dispose() {
+    for (final row in _rows) {
+      row.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _handleSave() async {
+    if (_isSaving) return;
+
+    // --- Validasi ---
+    bool hasValidationError = false;
+    setState(() {
+      for (final row in _rows) {
+        final kataVal = row.kataController.text.trim();
+        final artiVal = row.artiController.text.trim();
+        row.hasError = artiVal.isNotEmpty && kataVal.isEmpty;
+        if (row.hasError) {
+          hasValidationError = true;
+        }
+      }
+    });
+
+    if (hasValidationError) return;
+
+    final validRows = _rows
+        .where((r) => r.kataController.text.trim().isNotEmpty)
+        .toList();
+
+    if (validRows.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Silakan isi minimal 1 kata.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
+      final deckProvider = context.read<DeckProvider>();
+      final availableDecks = deckProvider.decks
+          .where((d) => d.id != widget.currentDeck.id)
+          .toList();
+
+      Deck targetDeck = widget.currentDeck.copyWith(
+        columnHeaders: DeckColumnHelper.standardCustomHeaders,
+        columnCount: DeckColumnHelper.standardCustomHeaders.length,
+        visibleColumnCount: DeckColumnHelper.standardCustomHeaders.length,
+      );
+
+      for (final row in validRows) {
+        final kata = row.kataController.text.trim();
+        final arti = row.artiController.text.trim();
+        bool foundAny = false;
+
+        for (final deck in availableDecks) {
+          FlashcardCard? matchInDeck;
+          for (final card in deck.cards) {
+            // Cocokkan HANYA pada kolom pertama (Kata/Word)
+            if (card.columns.isNotEmpty &&
+                card.columns[0].toLowerCase().trim() == kata.toLowerCase()) {
+              matchInDeck = card;
+              break;
+            }
+          }
+
+          if (matchInDeck != null) {
+            foundAny = true;
+            final newColumns = DeckColumnHelper.buildStandardCustomColumns(
+              kata: kata,
+              arti: arti,
+              sourceName: deck.name,
+              sourceCard: matchInDeck,
+              sourceHeaders: deck.columnHeaders,
+            );
+
+            targetDeck = targetDeck.addCard(
+              FlashcardCard(
+                columns: newColumns,
+                score: matchInDeck.score,
+              ),
+            );
+            break; // Stop di source pertama yang cocok
+          }
+        }
+
+        if (!foundAny) {
+          final newColumns = DeckColumnHelper.buildStandardCustomColumns(
+            kata: kata,
+            arti: arti,
+            sourceName: 'Manual/Custom',
+          );
+
+          targetDeck = targetDeck.addCard(
+            FlashcardCard(columns: newColumns),
+          );
+        }
+      }
+
+      await deckProvider.updateDeck(targetDeck);
+
+      if (mounted) {
+        final count = validRows.length;
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              count == 1
+                  ? 'Kata "${validRows.first.kataController.text.trim()}" berhasil ditambahkan!'
+                  : '$count kata berhasil ditambahkan!',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Tambah Kata Baru'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Column header labels
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Kata',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Arti',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 36), // Space for delete button
+                  ],
+                ),
+              ),
+
+              // Input rows
+              ...List.generate(_rows.length, (i) {
+                final rowItem = _rows[i];
+                final hasError = rowItem.hasError;
+                return Padding(
+                  key: rowItem.key,
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Kata field
+                      Expanded(
+                        child: TextField(
+                          controller: rowItem.kataController,
+                          autofocus: i == 0,
+                          decoration: InputDecoration(
+                            hintText: 'Kata ${i + 1}',
+                            border: const OutlineInputBorder(),
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 10,
+                            ),
+                          ),
+                          onChanged: (_) {
+                            if (rowItem.hasError) {
+                              setState(() => rowItem.hasError = false);
+                            }
+                          },
+                          textInputAction: TextInputAction.next,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Arti field
+                      Expanded(
+                        child: TextField(
+                          controller: rowItem.artiController,
+                          decoration: InputDecoration(
+                            hintText: 'Arti ${i + 1}',
+                            border: OutlineInputBorder(
+                              borderSide: BorderSide(
+                                color: hasError ? Colors.red : Colors.grey,
+                                width: hasError ? 2 : 1,
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderSide: BorderSide(
+                                color: hasError ? Colors.red : Colors.grey,
+                                width: hasError ? 2 : 1,
+                              ),
+                            ),
+                            errorText: hasError ? 'Kata wajib diisi' : null,
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 10,
+                            ),
+                          ),
+                          onChanged: (_) {
+                            if (rowItem.hasError) {
+                              setState(() => rowItem.hasError = false);
+                            }
+                          },
+                          textInputAction: i == _rows.length - 1
+                              ? TextInputAction.done
+                              : TextInputAction.next,
+                        ),
+                      ),
+                      // Delete button (hidden on first row)
+                      SizedBox(
+                        width: 36,
+                        child: i == 0
+                            ? const SizedBox.shrink()
+                            : IconButton(
+                                icon: const Icon(Icons.close, size: 18),
+                                padding: const EdgeInsets.only(top: 8, left: 4),
+                                onPressed: () => _removeRow(i),
+                                tooltip: 'Hapus baris',
+                              ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+
+              // Add-row button / limit message
+              if (_rows.length < maxRows)
+                TextButton.icon(
+                  onPressed: _addRow,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Tambah baris'),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    'Maksimal $maxRows baris tercapai',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSaving ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _isSaving ? null : _handleSave,
+          child: _isSaving
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Save'),
+        ),
+      ],
+    );
+  }
+}

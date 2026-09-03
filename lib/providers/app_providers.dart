@@ -6,6 +6,7 @@ import '../models/flashcard_card.dart';
 import '../models/order_mode.dart';
 import '../services/storage_service.dart';
 import '../services/excel_service.dart';
+import '../utils/deck_column_helper.dart';
 
 class DeckProvider extends ChangeNotifier {
   final StorageService _storageService = StorageService();
@@ -45,12 +46,27 @@ class DeckProvider extends ChangeNotifier {
       final customDeck = Deck(
         id: 'custom_mode_deck_default',
         name: 'Custom Mode',
-        columnCount: 2,
-        columnHeaders: ['Kata', 'Arti'],
+        columnCount: DeckColumnHelper.standardCustomHeaders.length,
+        columnHeaders: DeckColumnHelper.standardCustomHeaders,
         cards: [],
       );
       _decks.insert(0, customDeck);
       needsSave = true;
+    }
+
+    // Sanitize & migrate Custom Mode deck: fix broken/misaligned headers and columns
+    final customIdx = _decks.indexWhere((d) => d.id == 'custom_mode_deck_default');
+    if (customIdx != -1) {
+      final customDeck = _decks[customIdx];
+      final isHeaderBroken = customDeck.columnHeaders.join('|') !=
+          DeckColumnHelper.standardCustomHeaders.join('|');
+      final hasCards = customDeck.cards.isNotEmpty;
+      if (isHeaderBroken || hasCards) {
+        final otherDecks = _decks.where((d) => d.id != customDeck.id).toList();
+        final sanitized = DeckColumnHelper.sanitizeAndAlignCustomDeck(customDeck, otherDecks);
+        _decks[customIdx] = sanitized;
+        needsSave = true;
+      }
     }
 
     if (needsSave) {
@@ -334,13 +350,15 @@ class DeckProvider extends ChangeNotifier {
         continue;
       }
 
-      // Rebuild updated columns
-      List<String> newCols = [
-        matchingSourceCard.columns.isNotEmpty ? matchingSourceCard.columns[0] : card.columns[0],
-        matchingSourceCard.columns.length > 1 ? matchingSourceCard.columns[1] : (card.columns.length > 1 ? card.columns[1] : ''),
-        sourceDeck.name,
-      ];
-      newCols.addAll(matchingSourceCard.columns);
+      // Rebuild updated columns using standard header-aware mapping
+      final existingArti = card.columns.length > 1 ? card.columns[1] : '';
+      final List<String> newCols = DeckColumnHelper.buildStandardCustomColumns(
+        kata: matchingSourceCard.columns.isNotEmpty ? matchingSourceCard.columns[0] : card.columns[0],
+        arti: existingArti,
+        sourceName: sourceDeck.name,
+        sourceCard: matchingSourceCard,
+        sourceHeaders: sourceDeck.columnHeaders,
+      );
 
       // Pad columns to match customDeck columnCount
       while (newCols.length < customDeck.columnCount) {
@@ -508,13 +526,15 @@ class DeckProvider extends ChangeNotifier {
       };
     }
 
-    // Rebuild updated columns
-    List<String> newCols = [
-      matchingSourceCard.columns.isNotEmpty ? matchingSourceCard.columns[0] : card.columns[0],
-      matchingSourceCard.columns.length > 1 ? matchingSourceCard.columns[1] : (card.columns.length > 1 ? card.columns[1] : ''),
-      sourceDeck.name,
-    ];
-    newCols.addAll(matchingSourceCard.columns);
+    // Rebuild updated columns using standard header-aware mapping
+    final existingArti = card.columns.length > 1 ? card.columns[1] : '';
+    final List<String> newCols = DeckColumnHelper.buildStandardCustomColumns(
+      kata: matchingSourceCard.columns.isNotEmpty ? matchingSourceCard.columns[0] : card.columns[0],
+      arti: existingArti,
+      sourceName: sourceDeck.name,
+      sourceCard: matchingSourceCard,
+      sourceHeaders: sourceDeck.columnHeaders,
+    );
 
     while (newCols.length < targetDeck.columnCount) {
       newCols.add('');
