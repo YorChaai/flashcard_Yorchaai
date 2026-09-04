@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/deck.dart';
 import '../models/deck_config.dart';
 import '../models/flashcard_card.dart';
@@ -78,9 +79,35 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
   int _currentPage = 0;
   bool _isRefreshing = false;
 
+  // Table Zoom State (50% - 100%)
+  int _zoomPercent = 100;
+  static const String _zoomPrefKey = 'preview_table_zoom_percent';
+
+  Future<void> _loadZoomPreference() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getInt(_zoomPrefKey);
+      if (saved != null && saved >= 50 && saved <= 100) {
+        if (mounted) {
+          setState(() {
+            _zoomPercent = saved;
+          });
+        }
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _saveZoomPreference(int value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_zoomPrefKey, value);
+    } catch (_) {}
+  }
+
   @override
   void initState() {
     super.initState();
+    _loadZoomPreference();
     _allCards = List.from(widget.previewCards);
     _cardOriginalNumbers.clear();
     for (int i = 0; i < _allCards.length; i++) {
@@ -1946,6 +1973,210 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
     );
   }
 
+  Widget _buildZoomButton(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final lang = context.watch<LanguageProvider>().currentLanguage;
+
+    return Center(
+      child: InkWell(
+        onTap: () => _showZoomDialog(context),
+        borderRadius: BorderRadius.circular(16),
+        child: Tooltip(
+          message: lang == 'id'
+              ? 'Zoom Ukuran Tabel ($_zoomPercent%)'
+              : 'Table Zoom ($_zoomPercent%)',
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+            decoration: BoxDecoration(
+              color: _zoomPercent < 100
+                  ? Colors.amber.withValues(alpha: 0.18)
+                  : (isDark ? Colors.white.withValues(alpha: 0.1) : Colors.black.withValues(alpha: 0.06)),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: _zoomPercent < 100
+                    ? Colors.amber.shade700
+                    : (isDark ? Colors.white24 : Colors.black12),
+                width: 1.2,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  _zoomPercent < 100 ? Icons.zoom_out_rounded : Icons.zoom_in_rounded,
+                  size: 15,
+                  color: _zoomPercent < 100 ? Colors.amber.shade800 : null,
+                ),
+                const SizedBox(width: 3),
+                Text(
+                  '$_zoomPercent%',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: _zoomPercent < 100 ? Colors.amber.shade800 : null,
+                  ),
+                ),
+                const SizedBox(width: 1),
+                Icon(
+                  Icons.arrow_drop_down,
+                  size: 14,
+                  color: _zoomPercent < 100 ? Colors.amber.shade800 : null,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showZoomDialog(BuildContext context) {
+    final lang = context.read<LanguageProvider>().currentLanguage;
+    int tempZoom = _zoomPercent;
+    final inputController = TextEditingController(text: tempZoom.toString());
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          void updateZoom(int val) {
+            final clamped = val.clamp(50, 100);
+            setDialogState(() {
+              tempZoom = clamped;
+              inputController.text = clamped.toString();
+            });
+            setState(() {
+              _zoomPercent = clamped;
+            });
+            _saveZoomPreference(clamped);
+          }
+
+          return AlertDialog(
+            title: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.zoom_in_rounded, color: Colors.blueAccent),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    lang == 'id' ? 'Ukuran Tabel (Zoom)' : 'Table Zoom Size',
+                    style: const TextStyle(fontSize: 17),
+                  ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: MediaQuery.of(context).size.width.clamp(280.0, 360.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    lang == 'id'
+                        ? 'Atur persentase ukuran tampilan tabel (50% – 100%).'
+                        : 'Adjust table scale percentage (50% – 100%).',
+                    style: TextStyle(fontSize: 12.5, color: Colors.grey[500]),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        lang == 'id' ? 'Persentase:' : 'Percentage:',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      SizedBox(
+                        width: 80,
+                        height: 36,
+                        child: TextField(
+                          controller: inputController,
+                          keyboardType: TextInputType.number,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          decoration: InputDecoration(
+                            suffixText: '%',
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            isDense: true,
+                          ),
+                          onSubmitted: (val) {
+                            final parsed = int.tryParse(val.trim());
+                            if (parsed != null) updateZoom(parsed);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      const Text('50%', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                      Expanded(
+                        child: Slider(
+                          value: tempZoom.toDouble(),
+                          min: 50.0,
+                          max: 100.0,
+                          divisions: 50,
+                          label: '$tempZoom%',
+                          onChanged: (val) {
+                            updateZoom(val.round());
+                          },
+                        ),
+                      ),
+                      const Text('100%', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    lang == 'id' ? 'Pilihan Cepat:' : 'Quick Presets:',
+                    style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final preset in [50, 60, 70, 75, 80, 90, 100])
+                        ChoiceChip(
+                          label: Text('$preset%', style: const TextStyle(fontSize: 11)),
+                          selected: tempZoom == preset,
+                          visualDensity: VisualDensity.compact,
+                          selectedColor: Colors.blueAccent,
+                          labelStyle: TextStyle(
+                            fontSize: 11,
+                            fontWeight: tempZoom == preset ? FontWeight.bold : FontWeight.normal,
+                            color: tempZoom == preset ? Colors.white : null,
+                          ),
+                          onSelected: (selected) {
+                            if (selected) updateZoom(preset);
+                          },
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  updateZoom(100);
+                },
+                child: Text(
+                  lang == 'id' ? 'Reset 100%' : 'Reset 100%',
+                  style: const TextStyle(color: Colors.amber),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: Text(AppStrings.close(lang)),
+              ),
+            ],
+          );
+        },
+      ),
+    ).then((_) => inputController.dispose());
+  }
+
   @override
   Widget build(BuildContext context) {
     final langProv = context.watch<LanguageProvider>();
@@ -1981,6 +2212,9 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                 tooltip: AppStrings.refreshSource(lang),
               ),
           ],
+          // Zoom In / Out Dropdown / Slider Action (50% - 100%)
+          _buildZoomButton(context),
+          const SizedBox(width: 4),
           // Modern Copy Prompt Badge Action
           Badge(
             label: Text(
@@ -2637,11 +2871,11 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                       value: _rowsPerPage,
                       isDense: true,
                       underline: const SizedBox(),
-                      items: const [
-                        DropdownMenuItem(value: 25, child: Text('25/page', style: TextStyle(fontSize: 12))),
-                        DropdownMenuItem(value: 50, child: Text('50/page', style: TextStyle(fontSize: 12))),
-                        DropdownMenuItem(value: 100, child: Text('100/page', style: TextStyle(fontSize: 12))),
-                        DropdownMenuItem(value: 250, child: Text('250/page', style: TextStyle(fontSize: 12))),
+                      items: [
+                        DropdownMenuItem(value: 25, child: Text(lang == 'id' ? '25 baris/hal' : '25/page', style: const TextStyle(fontSize: 12))),
+                        DropdownMenuItem(value: 50, child: Text(lang == 'id' ? '50 baris/hal' : '50/page', style: const TextStyle(fontSize: 12))),
+                        DropdownMenuItem(value: 100, child: Text(lang == 'id' ? '100 baris/hal' : '100/page', style: const TextStyle(fontSize: 12))),
+                        DropdownMenuItem(value: 250, child: Text(lang == 'id' ? '250 baris/hal' : '250/page', style: const TextStyle(fontSize: 12))),
                       ],
                       onChanged: (val) {
                         if (val != null) {
@@ -2711,50 +2945,69 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
               SingleChildScrollView(
                 physics: const ClampingScrollPhysics(),
                 scrollDirection: Axis.horizontal,
-                child: DataTable(
-                  showCheckboxColumn: false,
-                  sortColumnIndex: _sortColumnIndex,
-                  sortAscending: _sortAscending,
-                  columnSpacing: 18.0,
-                  dataRowMinHeight: 48,
-                  dataRowMaxHeight: 48,
-                  columns: [
-                    DataColumn(
-                      label: Tooltip(
-                        message: lang == 'id'
-                            ? 'Tekan lama nomor baris No. untuk memilih'
-                            : 'Long press row No. to select',
-                        child: const Text('No.', style: TextStyle(fontWeight: FontWeight.bold)),
+                child: () {
+                  final zoomScale = (_zoomPercent / 100.0).clamp(0.5, 1.0);
+                  return DataTable(
+                    showCheckboxColumn: false,
+                    sortColumnIndex: _sortColumnIndex,
+                    sortAscending: _sortAscending,
+                    columnSpacing: (18.0 * zoomScale).clamp(6.0, 18.0),
+                    dataRowMinHeight: (48.0 * zoomScale).clamp(26.0, 48.0),
+                    dataRowMaxHeight: (48.0 * zoomScale).clamp(26.0, 48.0),
+                    headingRowHeight: (56.0 * zoomScale).clamp(32.0, 56.0),
+                    columns: [
+                      DataColumn(
+                        label: Tooltip(
+                          message: lang == 'id'
+                              ? 'Tekan lama nomor baris No. untuk memilih'
+                              : 'Long press row No. to select',
+                          child: Text(
+                            'No.',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: (14.0 * zoomScale).clamp(9.0, 14.0),
+                            ),
+                          ),
+                        ),
+                        onSort: (colIdx, asc) => _onSort(0, asc),
                       ),
-                      onSort: (colIdx, asc) => _onSort(0, asc),
-                    ),
-                    for (int i = 0; i < widget.columnHeaders.length; i++)
+                      for (int i = 0; i < widget.columnHeaders.length; i++)
+                        DataColumn(
+                          label: Text(
+                            widget.columnHeaders[i],
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: (14.0 * zoomScale).clamp(9.0, 14.0),
+                            ),
+                          ),
+                          onSort: (colIdx, asc) => _onSort(i + 1, asc),
+                        ),
                       DataColumn(
                         label: Text(
-                          widget.columnHeaders[i],
-                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          'Score',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: (14.0 * zoomScale).clamp(9.0, 14.0),
+                          ),
                         ),
-                        onSort: (colIdx, asc) => _onSort(i + 1, asc),
+                        onSort: (colIdx, asc) => _onSort(widget.columnHeaders.length + 1, asc),
                       ),
-                    DataColumn(
-                      label: const Text(
-                        'Score',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                      DataColumn(
+                        label: Text(
+                          AppStrings.tableAction(lang),
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: (14.0 * zoomScale).clamp(9.0, 14.0),
+                          ),
+                        ),
                       ),
-                      onSort: (colIdx, asc) => _onSort(widget.columnHeaders.length + 1, asc),
-                    ),
-                    DataColumn(
-                      label: Text(
-                        AppStrings.tableAction(lang),
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ],
-                  rows: [
-                    for (int i = 0; i < pageCards.length; i++)
-                      _createDataRow(pageCards[i], startIdx + i + 1),
-                  ],
-                ),
+                    ],
+                    rows: [
+                      for (int i = 0; i < pageCards.length; i++)
+                        _createDataRow(pageCards[i], startIdx + i + 1, zoomScale),
+                    ],
+                  );
+                }(),
               ),
           ],
         ),
@@ -2762,13 +3015,26 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
     );
   }
 
-  DataRow _createDataRow(FlashcardCard card, int absoluteIndex) {
+  DataRow _createDataRow(FlashcardCard card, int absoluteIndex, double zoomScale) {
     final lang = context.read<LanguageProvider>().currentLanguage;
     final originalNo = _cardOriginalNumbers[card.id] ?? absoluteIndex;
     final columns = card.allColumns;
     final isCustomDb = _isCustomDatabase();
     final isSelected = _selectedCardIds.contains(card.id);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final noPillWidth = (46.0 * zoomScale).clamp(28.0, 46.0);
+    final noPillHeight = (30.0 * zoomScale).clamp(20.0, 30.0);
+    final noFontSize = ((originalNo.toString().length >= 5 ? 11.0 : 12.5) * zoomScale).clamp(7.5, 12.5);
+
+    final cellFontSize = (13.0 * zoomScale).clamp(8.5, 13.0);
+    final cellMaxWidth = (240.0 * zoomScale).clamp(110.0, 240.0);
+
+    final scoreFontSize = (12.0 * zoomScale).clamp(8.0, 12.0);
+    final scorePadH = (8.0 * zoomScale).clamp(4.0, 8.0);
+    final scorePadV = (3.0 * zoomScale).clamp(1.5, 3.0);
+
+    final iconBtnSize = (20.0 * zoomScale).clamp(14.0, 20.0);
 
     return DataRow(
       color: isSelected
@@ -2797,21 +3063,21 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                 });
               }
             },
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(8 * zoomScale),
             child: Container(
-              constraints: const BoxConstraints(minWidth: 46, minHeight: 30),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              constraints: BoxConstraints(minWidth: noPillWidth, minHeight: noPillHeight),
+              padding: EdgeInsets.symmetric(horizontal: 6 * zoomScale, vertical: 3 * zoomScale),
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: isSelected
                     ? const Color(0xFF4CAF50)
                     : (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05)),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(8 * zoomScale),
                 border: Border.all(
                   color: isSelected
                       ? const Color(0xFF4CAF50)
                       : (isDark ? Colors.white24 : Colors.black12),
-                  width: 1.5,
+                  width: 1.5 * zoomScale,
                 ),
               ),
               child: Text(
@@ -2820,7 +3086,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                 softWrap: false,
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  fontSize: originalNo.toString().length >= 5 ? 11 : 12.5,
+                  fontSize: noFontSize,
                   color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
                 ),
               ),
@@ -2830,27 +3096,28 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
         for (int i = 0; i < widget.columnHeaders.length; i++)
           DataCell(
             ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 240),
+              constraints: BoxConstraints(maxWidth: cellMaxWidth),
               child: Text(
                 i < columns.length
                     ? (i == _getTypeColumnIndex() ? _formatCardType(columns[i]) : columns[i])
                     : '',
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: cellFontSize),
               ),
             ),
           ),
         DataCell(
           Center(
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              padding: EdgeInsets.symmetric(horizontal: scorePadH, vertical: scorePadV),
               decoration: BoxDecoration(
                 color: card.score > 0
                     ? Colors.green.withValues(alpha: 0.15)
                     : (card.score < 0
                         ? Colors.red.withValues(alpha: 0.15)
                         : (isDark ? Colors.white10 : Colors.grey.shade200)),
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.circular(6 * zoomScale),
                 border: Border.all(
                   color: card.score > 0
                       ? Colors.green.shade600
@@ -2862,7 +3129,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                 card.score.toString(),
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  fontSize: 12,
+                  fontSize: scoreFontSize,
                   color: card.score > 0
                       ? Colors.green.shade700
                       : (card.score < 0 ? Colors.red.shade700 : (isDark ? Colors.white70 : Colors.black87)),
@@ -2877,18 +3144,27 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
             children: [
               if (isCustomDb)
                 IconButton(
-                  icon: const Icon(Icons.sync, color: Colors.blueAccent, size: 20),
+                  icon: Icon(Icons.sync, color: Colors.blueAccent, size: iconBtnSize),
                   onPressed: () => _handleRefreshSingleCard(card),
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: BoxConstraints(minWidth: 26 * zoomScale, minHeight: 26 * zoomScale),
                   tooltip: lang == 'id' ? 'Refresh baris ini dari dataset sumber' : 'Refresh this row from source dataset',
                 ),
               IconButton(
-                icon: const Icon(Icons.edit_outlined, color: Colors.amber, size: 20),
+                icon: Icon(Icons.edit_outlined, color: Colors.amber, size: iconBtnSize),
                 onPressed: () => _showEditCardDialog(card, originalNo),
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: BoxConstraints(minWidth: 26 * zoomScale, minHeight: 26 * zoomScale),
                 tooltip: lang == 'id' ? 'Edit data baris ini' : 'Edit this row',
               ),
               IconButton(
-                icon: const Icon(Icons.close, color: Colors.red, size: 20),
+                icon: Icon(Icons.close, color: Colors.red, size: iconBtnSize),
                 onPressed: () => _confirmDelete(card),
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: BoxConstraints(minWidth: 26 * zoomScale, minHeight: 26 * zoomScale),
                 tooltip: isCustomDb
                     ? (lang == 'id' ? 'Pindahkan ke Deleted Data' : 'Move to Deleted Data')
                     : (lang == 'id' ? 'Hapus baris' : 'Delete row'),
