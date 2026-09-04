@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../models/deck.dart';
 import '../models/flashcard_card.dart';
 import '../providers/app_providers.dart';
+import '../providers/language_provider.dart';
+import '../utils/app_strings.dart';
 import '../widgets/swipeable_notification.dart';
 
 class DeletedDataScreen extends StatefulWidget {
@@ -79,13 +81,14 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
     final success = await provider.restoreCard(widget.deck.id, card.id);
 
     if (mounted) {
+      final lang = context.read<LanguageProvider>().currentLanguage;
       _rebuildOriginalNumbers();
       setState(() {});
       AppNotification.show(
         context,
         message: success
-            ? 'Kartu "$word" berhasil dikembalikan ke posisi aslinya'
-            : 'Gagal mengembalikan kartu',
+            ? AppStrings.cardRestoredSuccess(lang, word)
+            : AppStrings.cardRestoreFailed(lang),
         icon: success ? Icons.restore_from_trash_rounded : Icons.error_outline,
         backgroundColor: success ? Colors.green[800] : Colors.red[800],
       );
@@ -110,6 +113,7 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
   }
 
   void _showEditCardDialog(FlashcardCard card, int displayNumber) {
+    final lang = context.read<LanguageProvider>().currentLanguage;
     final columnHeaders = widget.columnHeaders;
     final Map<int, TextEditingController> controllers = {};
 
@@ -128,7 +132,7 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Edit Deleted Baris #$displayNumber',
+                AppStrings.editDeletedRowTitle(lang, displayNumber),
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
@@ -148,14 +152,14 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
                   ),
-                  child: const Row(
+                  child: Row(
                     children: [
-                      Icon(Icons.info_outline, size: 16, color: Colors.amber),
-                      SizedBox(width: 8),
+                      const Icon(Icons.info_outline, size: 16, color: Colors.amber),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Anda sedang mengedit data yang berada di Deleted Data (Trash).',
-                          style: TextStyle(fontSize: 12),
+                          AppStrings.editingTrashWarning(lang),
+                          style: const TextStyle(fontSize: 12),
                         ),
                       ),
                     ],
@@ -166,7 +170,7 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
                   TextField(
                     controller: controllers[i],
                     decoration: InputDecoration(
-                      labelText: columnHeaders[i],
+                      labelText: AppStrings.formatColumnHeader(columnHeaders[i], lang),
                       border: const OutlineInputBorder(),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                     ),
@@ -176,10 +180,10 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
                 TextField(
                   controller: scoreController,
                   keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Score',
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  decoration: InputDecoration(
+                    labelText: AppStrings.formatColumnHeader('Score', lang),
+                    border: const OutlineInputBorder(),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                   ),
                 ),
               ],
@@ -189,11 +193,11 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Batal'),
+            child: Text(AppStrings.cancel(lang)),
           ),
           ElevatedButton.icon(
             icon: const Icon(Icons.save, size: 18),
-            label: const Text('Simpan Perubahan'),
+            label: Text(AppStrings.saveChanges(lang)),
             onPressed: () async {
               List<String> newCols = [];
               for (int i = 0; i < columnHeaders.length; i++) {
@@ -220,7 +224,7 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
                 setState(() {});
                 AppNotification.show(
                   context,
-                  message: 'Perubahan data berhasil disimpan',
+                  message: AppStrings.changesSavedSuccess(lang),
                   icon: Icons.check_circle_outline,
                   backgroundColor: Colors.green[800],
                 );
@@ -238,17 +242,18 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
   }
 
   void _showJumpToPageDialog(int totalPages) {
+    final lang = context.read<LanguageProvider>().currentLanguage;
     final pageController = TextEditingController(text: '');
 
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Row(
+        title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.find_in_page_rounded, color: Colors.blueAccent),
-            SizedBox(width: 8),
-            Flexible(child: Text('Lompat ke Halaman')),
+            const Icon(Icons.find_in_page_rounded, color: Colors.blueAccent),
+            const SizedBox(width: 8),
+            Flexible(child: Text(AppStrings.jumpToPage(lang))),
           ],
         ),
         content: SizedBox(
@@ -258,7 +263,7 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Masukkan nomor halaman (1 s/d $totalPages):',
+                AppStrings.enterPageNumber(lang, totalPages),
                 style: const TextStyle(fontSize: 13),
               ),
               const SizedBox(height: 12),
@@ -267,7 +272,7 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
                 autofocus: true,
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
-                  hintText: 'Ketik nomor halaman...',
+                  hintText: AppStrings.typePageNumber(lang),
                   border: const OutlineInputBorder(),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   suffixText: '/ $totalPages',
@@ -282,13 +287,13 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Batal'),
+            child: Text(AppStrings.cancel(lang)),
           ),
           ElevatedButton(
             onPressed: () {
               _handleJump(pageController.text, totalPages, dialogContext);
             },
-            child: const Text('Lanjut'),
+            child: Text(AppStrings.go(lang)),
           ),
         ],
       ),
@@ -308,13 +313,14 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageProvider>().currentLanguage;
     final filteredCards = _getFilteredCards();
     final deck = _getCurrentDeck();
 
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'Deleted Data (${deck.deletedCards.length}) - ${deck.name}',
+          '${AppStrings.deletedData(lang)} (${deck.deletedCards.length}) - ${deck.name}',
           softWrap: true,
           maxLines: 2,
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -342,7 +348,7 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
                   child: TextField(
                     controller: _searchController,
                     decoration: InputDecoration(
-                      hintText: 'Cari di deleted data (kata, arti, type, dll)...',
+                      hintText: AppStrings.searchDeletedData(lang),
                       prefixIcon: const Icon(Icons.search, size: 20),
                       suffixIcon: _searchQuery.isNotEmpty
                           ? IconButton(
@@ -380,9 +386,9 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildDataTableCard(context, filteredCards),
+                  _buildDataTableCard(context, filteredCards, lang),
                   const SizedBox(height: 12),
-                  _buildPaginationControls(context, filteredCards),
+                  _buildPaginationControls(context, filteredCards, lang),
                   const SizedBox(height: 24),
                 ],
               ),
@@ -409,7 +415,7 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
-                child: const Text('Kembali ke Custom Database'),
+                child: Text(AppStrings.backToCustomDb(lang)),
               ),
             ),
           ),
@@ -418,7 +424,7 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
     );
   }
 
-  Widget _buildDataTableCard(BuildContext context, List<FlashcardCard> filteredCards) {
+  Widget _buildDataTableCard(BuildContext context, List<FlashcardCard> filteredCards, String lang) {
     final startIdx = _currentPage * _rowsPerPage;
     final endIdx = ((startIdx + _rowsPerPage) < filteredCards.length)
         ? (startIdx + _rowsPerPage)
@@ -446,9 +452,9 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
                   spacing: 8,
                   runSpacing: 4,
                   children: [
-                    const Text(
-                      '🗑️ Deleted Data Records',
-                      style: TextStyle(
+                    Text(
+                      AppStrings.deletedDataRecords(lang),
+                      style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
@@ -460,7 +466,7 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
-                        '${filteredCards.length} baris terhapus',
+                        AppStrings.rowsDeletedCount(lang, filteredCards.length),
                         style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.redAccent),
                       ),
                     ),
@@ -470,7 +476,7 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('Rows/page: ', style: TextStyle(fontSize: 13)),
+                    Text(AppStrings.rowsPerPage(lang), style: const TextStyle(fontSize: 13)),
                     DropdownButton<int>(
                       value: _rowsPerPage,
                       isDense: true,
@@ -496,12 +502,12 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
             ),
             const SizedBox(height: 12),
             if (pageCards.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(32.0),
+              Padding(
+                padding: const EdgeInsets.all(32.0),
                 child: Center(
                   child: Text(
-                    'Tidak ada data yang dihapus (Deleted Data kosong).',
-                    style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey),
+                    AppStrings.noDeletedData(lang),
+                    style: const TextStyle(fontStyle: FontStyle.italic, color: Colors.grey),
                   ),
                 ),
               )
@@ -519,20 +525,21 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
                     for (int i = 0; i < widget.columnHeaders.length; i++)
                       DataColumn(
                         label: Text(
-                          widget.columnHeaders[i],
+                          AppStrings.formatColumnHeader(widget.columnHeaders[i], lang),
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ),
-                    const DataColumn(
-                      label: Text('Score', style: TextStyle(fontWeight: FontWeight.bold)),
-                    ),
-                    const DataColumn(
-                      label: Text('Aksi', style: TextStyle(fontWeight: FontWeight.bold)),
+
+                    DataColumn(
+                      label: Text(
+                        AppStrings.tableAction(lang),
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ],
                   rows: [
                     for (int i = 0; i < pageCards.length; i++)
-                      _createDataRow(pageCards[i], startIdx + i + 1),
+                      _createDataRow(pageCards[i], startIdx + i + 1, lang),
                   ],
                 ),
               ),
@@ -542,7 +549,7 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
     );
   }
 
-  DataRow _createDataRow(FlashcardCard card, int absoluteIndex) {
+  DataRow _createDataRow(FlashcardCard card, int absoluteIndex, String lang) {
     final originalNo = card.originalIndex != null
         ? (card.originalIndex! + 1)
         : (_cardOriginalNumbers[card.id] ?? absoluteIndex);
@@ -563,7 +570,7 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
               ),
             ),
           ),
-        DataCell(Text(card.score.toString())),
+
         DataCell(
           Row(
             mainAxisSize: MainAxisSize.min,
@@ -572,19 +579,19 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
               IconButton(
                 icon: const Icon(Icons.sync, color: Colors.blueAccent, size: 20),
                 onPressed: () => _handleRefreshRow(card),
-                tooltip: 'Refresh baris ini dari dataset sumber',
+                tooltip: AppStrings.refreshRowTooltip(lang),
               ),
               // Edit
               IconButton(
                 icon: const Icon(Icons.edit_outlined, color: Colors.amber, size: 20),
                 onPressed: () => _showEditCardDialog(card, originalNo),
-                tooltip: 'Edit data baris ini',
+                tooltip: AppStrings.editCard(lang),
               ),
               // Restore button (Undo)
               IconButton(
                 icon: const Icon(Icons.restore_from_trash_rounded, color: Colors.green, size: 20),
                 onPressed: () => _handleRestoreCard(card),
-                tooltip: 'Kembalikan ke Custom Database (Undo / Restore)',
+                tooltip: AppStrings.restoreCard(lang),
               ),
             ],
           ),
@@ -593,7 +600,7 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
     );
   }
 
-  Widget _buildPaginationControls(BuildContext context, List<FlashcardCard> filteredCards) {
+  Widget _buildPaginationControls(BuildContext context, List<FlashcardCard> filteredCards, String lang) {
     if (filteredCards.isEmpty) return const SizedBox.shrink();
 
     final totalRows = filteredCards.length;
@@ -610,7 +617,7 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
       runSpacing: 8,
       children: [
         Text(
-          'Showing $startIdx - $endIdx of $totalRows entries',
+          AppStrings.showingEntries(lang, startIdx, endIdx, totalRows),
           style: TextStyle(fontSize: 13, color: Colors.grey[600]),
         ),
         Row(
@@ -619,7 +626,7 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
             IconButton(
               icon: const Icon(Icons.chevron_left),
               onPressed: _currentPage > 0 ? () => setState(() => _currentPage--) : null,
-              tooltip: 'Halaman Sebelumnya',
+              tooltip: AppStrings.previous(lang),
             ),
             InkWell(
               onTap: () => _showJumpToPageDialog(totalPages),
@@ -635,7 +642,7 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'Page ${_currentPage + 1} of $totalPages',
+                      AppStrings.pageOfTotal(lang, _currentPage + 1, totalPages),
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.blueAccent),
                     ),
                     const SizedBox(width: 4),
@@ -647,7 +654,7 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
             IconButton(
               icon: const Icon(Icons.chevron_right),
               onPressed: _currentPage < (totalPages - 1) ? () => setState(() => _currentPage++) : null,
-              tooltip: 'Halaman Berikutnya',
+              tooltip: AppStrings.next(lang),
             ),
           ],
         ),

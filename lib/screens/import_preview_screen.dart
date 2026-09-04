@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/language_provider.dart';
 import '../services/excel_service.dart';
+import '../utils/app_strings.dart';
 
 class ImportPreviewScreen extends StatelessWidget {
   final String filePath;
@@ -13,13 +16,15 @@ class ImportPreviewScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageProvider>().currentLanguage;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Import Preview'),
+        title: Text(lang == 'id' ? 'Preview Import' : 'Import Preview'),
         actions: [
           IconButton(
             icon: const Icon(Icons.info_outline),
-            onPressed: () => _showInfoDialog(context),
+            onPressed: () => _showInfoDialog(context, lang),
           ),
         ],
       ),
@@ -32,69 +37,72 @@ class ImportPreviewScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   // File Information Card
-                  _buildFileInformationCard(context),
+                  _buildFileInformationCard(context, lang),
                   const SizedBox(height: 16),
 
                   // Column Structure Card
-                  _buildColumnStructureCard(context),
+                  _buildColumnStructureCard(context, lang),
                   const SizedBox(height: 16),
 
                   // Data Preview Table
-                  _buildDataPreviewTable(context),
+                  _buildDataPreviewTable(context, lang),
                   const SizedBox(height: 16),
 
                   // Summary
-                  _buildSummary(context),
+                  _buildSummary(context, lang),
                 ],
               ),
             ),
           ),
 
           // Action Buttons
-          _buildActionButtons(context),
+          _buildActionButtons(context, lang),
         ],
       ),
     );
   }
 
-  Widget _buildFileInformationCard(BuildContext context) {
+  Widget _buildFileInformationCard(BuildContext context, String lang) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              '📄 File Information',
-              style: TextStyle(
+            Text(
+              lang == 'id' ? '📄 Informasi File' : '📄 File Information',
+              style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 12),
-            _buildInfoRow('File Name', metadata.fileName),
+            _buildInfoRow(lang == 'id' ? 'Nama File' : 'File Name', metadata.fileName),
             const SizedBox(height: 8),
-            _buildInfoRow('Sheet Name', metadata.sheetName),
+            _buildInfoRow(lang == 'id' ? 'Nama Sheet' : 'Sheet Name', metadata.sheetName),
             const SizedBox(height: 8),
-            _buildInfoRow('Total Columns', '${metadata.columnCount - 1}'),
+            _buildInfoRow(lang == 'id' ? 'Total Kolom' : 'Total Columns', '${metadata.columnCount - 1}'),
             const SizedBox(height: 8),
-            _buildInfoRow('Total Data', '${metadata.totalRows} rows'),
+            _buildInfoRow(
+              'Total Data',
+              lang == 'id' ? '${metadata.totalRows} baris' : '${metadata.totalRows} rows',
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildColumnStructureCard(BuildContext context) {
+  Widget _buildColumnStructureCard(BuildContext context, String lang) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              '📊 Column Structure',
-              style: TextStyle(
+            Text(
+              lang == 'id' ? '📊 Struktur Kolom' : '📊 Column Structure',
+              style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
@@ -109,7 +117,7 @@ class ImportPreviewScreen extends StatelessWidget {
                 final isDark = Theme.of(context).brightness == Brightness.dark;
                 return Chip(
                   label: Text(
-                    '[${index + 1}] $header',
+                    '[${index + 1}] ${AppStrings.formatColumnHeader(header, lang)}',
                     style: TextStyle(
                       fontSize: 12,
                       color: isDark ? Colors.white : Colors.black,
@@ -128,16 +136,16 @@ class ImportPreviewScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildDataPreviewTable(BuildContext context) {
+  Widget _buildDataPreviewTable(BuildContext context, String lang) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              '👀 Data Preview',
-              style: TextStyle(
+            Text(
+              AppStrings.dataPreview(lang),
+              style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
@@ -152,7 +160,7 @@ class ImportPreviewScreen extends StatelessWidget {
                 columns: metadata.columnHeaders
                     .map((header) => DataColumn(
                           label: Text(
-                            header,
+                            AppStrings.formatColumnHeader(header, lang),
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ))
@@ -164,7 +172,9 @@ class ImportPreviewScreen extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(top: 12.0),
                 child: Text(
-                  '(${metadata.totalRows - 32} more rows hidden)',
+                  lang == 'id'
+                      ? '(${metadata.totalRows - 32} baris lainnya disembunyikan)'
+                      : '(${metadata.totalRows - 32} more rows hidden)',
                   style: TextStyle(
                     fontStyle: FontStyle.italic,
                     color: Colors.grey[600],
@@ -245,7 +255,7 @@ class ImportPreviewScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSummary(BuildContext context) {
+  Widget _buildSummary(BuildContext context, String lang) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -255,7 +265,9 @@ class ImportPreviewScreen extends StatelessWidget {
             const Icon(Icons.check_circle_outline, size: 24),
             const SizedBox(width: 12),
             Text(
-              'Total rows to import: ${metadata.totalRows} cards',
+              lang == 'id'
+                  ? 'Total baris yang akan diimpor: ${metadata.totalRows} kartu'
+                  : 'Total rows to import: ${metadata.totalRows} cards',
               style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
@@ -267,7 +279,7 @@ class ImportPreviewScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildActionButtons(BuildContext context) {
+  Widget _buildActionButtons(BuildContext context, String lang) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -288,7 +300,7 @@ class ImportPreviewScreen extends StatelessWidget {
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
-              child: const Text('Cancel'),
+              child: Text(AppStrings.cancel(lang)),
             ),
           ),
           const SizedBox(width: 16),
@@ -334,24 +346,30 @@ class ImportPreviewScreen extends StatelessWidget {
     );
   }
 
-  void _showInfoDialog(BuildContext context) {
+  void _showInfoDialog(BuildContext context, String lang) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Import Information'),
-        content: const Text(
-          'This preview shows the first 29 rows and last 3 rows of your Excel file.\n\n'
-          '• Column 1 will be displayed as the main word (large font)\n'
-          '• Columns 2-6 will be displayed as extra info (small font)\n\n'
-          'Click "Import Dataset" to proceed with importing this file.',
+        title: Text(lang == 'id' ? 'Informasi Import' : 'Import Information'),
+        content: Text(
+          lang == 'id'
+              ? 'Preview ini menampilkan 29 baris pertama dan 3 baris terakhir file Excel Anda.\n\n'
+                '• Kolom 1 akan ditampilkan sebagai kata utama (font besar)\n'
+                '• Kolom 2-6 akan ditampilkan sebagai info tambahan (font kecil)\n\n'
+                'Klik "Import Dataset" untuk melanjutkan proses impor file ini.'
+              : 'This preview shows the first 29 rows and last 3 rows of your Excel file.\n\n'
+                '• Column 1 will be displayed as the main word (large font)\n'
+                '• Columns 2-6 will be displayed as extra info (small font)\n\n'
+                'Click "Import Dataset" to proceed with importing this file.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            child: Text(AppStrings.close(lang)),
           ),
         ],
       ),
     );
   }
 }
+

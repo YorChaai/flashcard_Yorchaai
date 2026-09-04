@@ -6,7 +6,9 @@ import '../models/deck_config.dart';
 import '../models/flashcard_card.dart';
 import '../models/order_mode.dart';
 import '../providers/app_providers.dart';
+import '../providers/language_provider.dart';
 import '../services/prompt_service.dart';
+import '../utils/app_strings.dart';
 import '../widgets/swipeable_notification.dart';
 import 'deleted_data_screen.dart';
 
@@ -40,17 +42,22 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
   // Original row numbering map for cards
   final Map<String, int> _cardOriginalNumbers = {};
 
-  // Type Filter & Sort Priority
+  // Dynamic Column Filter State (Column Header -> Set of selected values)
+  final Map<String, List<String>> _allColumnUniqueValues = {};
+  Map<String, Set<String>> _columnFilters = {};
+  String? _lastSelectedFilterColumn;
+
+  // Type Filter & Sort Priority (Legacy compatibility)
   List<String> _allUniqueTypes = [];
   List<String> _typeSortPriority = [];
   Set<String> _selectedFilterTypes = {};
   bool _isTypeFilterInitialized = false;
 
-  // CEFR Filter
+  // CEFR Filter (Legacy compatibility)
   static const List<String> _allCefrLevels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
   Set<String> _selectedCefrLevels = {'A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'EMPTY'};
 
-  // Score Filter (3 distinct categories: Negative, Zero, Positive)
+  // Score Filter (Legacy compatibility)
   bool _includeNegativeScore = true;
   bool _includeZeroScore = true;
   bool _includePositiveScore = true;
@@ -80,6 +87,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
       _cardOriginalNumbers[_allCards[i].id] = i + 1;
     }
     _extractUniqueTypes();
+    _extractUniqueColumnValues();
 
     final deck = _getCurrentDeck();
     if (deck != null) {
@@ -109,6 +117,10 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
         _includePositiveScore = config.selectedFilterScore.contains('>0');
       }
 
+      if (config.columnFilters.isNotEmpty) {
+        _columnFilters = Map.from(config.columnFilters);
+      }
+      _lastSelectedFilterColumn = config.lastSelectedFilterColumn;
       _rangeStart = config.rangeStart ?? deck.lastLearningRangeStart;
       _rangeEnd = config.rangeEnd ?? deck.lastLearningRangeEnd;
       _orderMode = config.orderMode;
@@ -126,38 +138,55 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
     final provider = context.read<DeckProvider>();
     final config = await provider.loadDeckConfig(deck.id);
 
-    if (mounted) {
-      setState(() {
-        _sortColumnIndex = config.sortColumnIndex;
-        _sortAscending = config.sortAscending;
-        if (config.typeSortPriority.isNotEmpty) {
-          _typeSortPriority = List.from(config.typeSortPriority);
-        }
-        _cefrSortAscending = config.cefrSortAscending;
-        _scoreSortAscending = config.scoreSortAscending;
-
-        if (config.selectedFilterTypes.isNotEmpty) {
-          _selectedFilterTypes = Set.from(config.selectedFilterTypes);
-          _isTypeFilterInitialized = true;
-        }
-
-        if (config.selectedFilterCefr.isNotEmpty) {
-          _selectedCefrLevels = Set.from(config.selectedFilterCefr);
-        }
-
-        if (config.selectedFilterScore.isNotEmpty) {
-          _includeNegativeScore = config.selectedFilterScore.contains('<0');
-          _includeZeroScore = config.selectedFilterScore.contains('0');
-          _includePositiveScore = config.selectedFilterScore.contains('>0');
-        }
-
-        _rangeStart = config.rangeStart ?? deck.lastLearningRangeStart;
-        _rangeEnd = config.rangeEnd ?? deck.lastLearningRangeEnd;
-        _orderMode = config.orderMode;
-      });
-
-      _applyFilterAndSort();
+    if (!mounted) return;
+    // Fast check: if config in memory is already identical, avoid redundant re-filter/re-sort on 14,000 cards
+    if (config.sortColumnIndex == _sortColumnIndex &&
+        config.sortAscending == _sortAscending &&
+        config.typeSortPriority.length == _typeSortPriority.length &&
+        config.rangeStart == _rangeStart &&
+        config.rangeEnd == _rangeEnd &&
+        config.selectedFilterTypes.length == _selectedFilterTypes.length &&
+        config.selectedFilterCefr.length == _selectedCefrLevels.length &&
+        config.columnFilters.length == _columnFilters.length) {
+      return;
     }
+
+    setState(() {
+      _sortColumnIndex = config.sortColumnIndex;
+      _sortAscending = config.sortAscending;
+      if (config.typeSortPriority.isNotEmpty) {
+        _typeSortPriority = List.from(config.typeSortPriority);
+        _formattedTypeCache.clear();
+      }
+      _cefrSortAscending = config.cefrSortAscending;
+      _scoreSortAscending = config.scoreSortAscending;
+
+      if (config.selectedFilterTypes.isNotEmpty) {
+        _selectedFilterTypes = Set.from(config.selectedFilterTypes);
+        _isTypeFilterInitialized = true;
+      }
+
+      if (config.selectedFilterCefr.isNotEmpty) {
+        _selectedCefrLevels = Set.from(config.selectedFilterCefr);
+      }
+
+      if (config.selectedFilterScore.isNotEmpty) {
+        _includeNegativeScore = config.selectedFilterScore.contains('<0');
+        _includeZeroScore = config.selectedFilterScore.contains('0');
+        _includePositiveScore = config.selectedFilterScore.contains('>0');
+      }
+
+      if (config.columnFilters.isNotEmpty) {
+        _columnFilters = Map.from(config.columnFilters);
+      }
+      _lastSelectedFilterColumn = config.lastSelectedFilterColumn;
+
+      _rangeStart = config.rangeStart ?? deck.lastLearningRangeStart;
+      _rangeEnd = config.rangeEnd ?? deck.lastLearningRangeEnd;
+      _orderMode = config.orderMode;
+    });
+
+    _applyFilterAndSort();
   }
 
   void _saveCurrentConfig() {
@@ -177,6 +206,8 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
         if (_includeZeroScore) '0',
         if (_includePositiveScore) '>0',
       },
+      columnFilters: _columnFilters,
+      lastSelectedFilterColumn: _lastSelectedFilterColumn,
       rangeStart: _rangeStart,
       rangeEnd: _rangeEnd,
       orderMode: _orderMode,
@@ -225,21 +256,136 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
     return null;
   }
 
+  static final RegExp _parenRegExp = RegExp(r'\(.*?\)');
+
   String _cleanTypeToken(String token) {
-    // Remove parenthesized content: e.g. "NOUN (Brand/Name)" -> "NOUN", "NOUN (Tech/Modern)" -> "NOUN"
-    final withoutParen = token.replaceAll(RegExp(r'\(.*?\)'), '').trim();
+    if (!token.contains('(')) return token.trim();
+    final idx = token.indexOf('(');
+    if (idx != -1) {
+      final sub = token.substring(0, idx).trim();
+      if (sub.isNotEmpty) return sub;
+    }
+    final withoutParen = token.replaceAll(_parenRegExp, '').trim();
     return withoutParen.isNotEmpty ? withoutParen : token.trim();
+  }
+
+  final Map<String, String> _formattedTypeCache = {};
+
+  String _formatCardType(String rawType) {
+    if (rawType.trim().isEmpty || _typeSortPriority.isEmpty) return rawType;
+    final cached = _formattedTypeCache[rawType];
+    if (cached != null) return cached;
+
+    final priorityMap = <String, int>{};
+    for (int i = 0; i < _typeSortPriority.length; i++) {
+      priorityMap[_typeSortPriority[i].toUpperCase().trim()] = i;
+    }
+
+    final hasDelimiter = rawType.contains(',') || rawType.contains('/');
+    if (!hasDelimiter) {
+      final res = rawType.trim();
+      _formattedTypeCache[rawType] = res;
+      return res;
+    }
+
+    final tokens = rawType.split(RegExp(r'[,/]'));
+    final parsedTokens = <Map<String, dynamic>>[];
+    for (final tok in tokens) {
+      final trimmed = tok.trim();
+      if (trimmed.isEmpty) continue;
+      final clean = _cleanTypeToken(trimmed).toUpperCase();
+      final p = priorityMap[clean] ?? (priorityMap[trimmed.toUpperCase()] ?? 999999);
+      parsedTokens.add({
+        'original': trimmed,
+        'priority': p,
+      });
+    }
+
+    parsedTokens.sort((a, b) {
+      final pComp = (a['priority'] as int).compareTo(b['priority'] as int);
+      if (pComp != 0) return pComp;
+      return 0;
+    });
+
+    final formatted = parsedTokens.map((e) => e['original'] as String).join(', ');
+    _formattedTypeCache[rawType] = formatted;
+    return formatted;
   }
 
   List<String> _getCardBaseTypes(FlashcardCard card, int typeColIdx) {
     if (typeColIdx >= card.columns.length) return [];
     final raw = card.columns[typeColIdx].trim();
     if (raw.isEmpty) return [];
-    return raw
-        .split(',')
-        .map((e) => _cleanTypeToken(e))
-        .where((e) => e.isNotEmpty)
-        .toList();
+    return (raw.contains(',') || raw.contains('/'))
+        ? raw.split(RegExp(r'[,/]')).map((e) => _cleanTypeToken(e)).where((e) => e.isNotEmpty).toList()
+        : [_cleanTypeToken(raw)].where((e) => e.isNotEmpty).toList();
+  }
+
+  int _getCardTopPriority(FlashcardCard card, int typeColIdx, Map<String, int> priorityMap) {
+    if (typeColIdx >= card.columns.length) return 999999;
+    final raw = card.columns[typeColIdx].trim();
+    if (raw.isEmpty) return 999999;
+
+    int minPriority = 999999;
+    if (!raw.contains(',') && !raw.contains('/')) {
+      final clean = _cleanTypeToken(raw).toUpperCase();
+      return priorityMap[clean] ?? (priorityMap[raw.toUpperCase()] ?? 999999);
+    }
+
+    final tokens = raw.split(RegExp(r'[,/]'));
+    for (final tok in tokens) {
+      final trimmed = tok.trim();
+      if (trimmed.isEmpty) continue;
+      final clean = _cleanTypeToken(trimmed).toUpperCase();
+      final p = priorityMap[clean] ?? (priorityMap[trimmed.toUpperCase()] ?? 999999);
+      if (p < minPriority) minPriority = p;
+    }
+    return minPriority;
+  }
+
+  List<String> _getUniqueValuesForColumn(String header, [int? colIdx]) {
+    if (header == 'Score') {
+      return ['+ (Score > 0)', '0 (Score = 0)', '- (Score < 0)'];
+    }
+    if (_allColumnUniqueValues.containsKey(header)) {
+      return _allColumnUniqueValues[header]!;
+    }
+    final idx = colIdx ?? widget.columnHeaders.indexOf(header);
+    if (idx == -1) return [];
+
+    final set = <String>{};
+    for (final card in _allCards) {
+      if (idx < card.columns.length) {
+        final val = card.columns[idx].trim();
+        if (val.isEmpty) {
+          set.add('(Empty)');
+        } else if (val.contains(',')) {
+          for (final tag in val.split(',')) {
+            final t = tag.trim();
+            if (t.isNotEmpty) set.add(t);
+          }
+        } else {
+          set.add(val);
+        }
+      } else {
+        set.add('(Empty)');
+      }
+    }
+    final sortedList = set.toList()
+      ..sort((a, b) {
+        if (a == '(Empty)') return 1;
+        if (b == '(Empty)') return -1;
+        final numA = num.tryParse(a);
+        final numB = num.tryParse(b);
+        if (numA != null && numB != null) return numA.compareTo(numB);
+        return a.toLowerCase().compareTo(b.toLowerCase());
+      });
+    _allColumnUniqueValues[header] = sortedList;
+    return sortedList;
+  }
+
+  void _extractUniqueColumnValues() {
+    _allColumnUniqueValues.clear();
   }
 
   void _extractUniqueTypes() {
@@ -265,22 +411,20 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
 
   bool _isColumnNumeric(int sortColIndex) {
     if (sortColIndex == 0) return true; // No.
-    if (sortColIndex == widget.columnHeaders.length + 1) return true; // Score
     final colIdx = sortColIndex - 1;
     if (colIdx >= 0 && colIdx < widget.columnHeaders.length) {
-      final header = widget.columnHeaders[colIdx].toLowerCase().trim();
-      if (header == 'top' || header == 'no' || header == 'score' || header == 'id') {
-        return true;
-      }
       int numCount = 0;
       int checked = 0;
       for (final card in _allCards) {
-        if (colIdx < card.columns.length && card.columns[colIdx].trim().isNotEmpty) {
-          checked++;
-          if (num.tryParse(card.columns[colIdx].trim()) != null) {
-            numCount++;
+        if (colIdx < card.columns.length) {
+          final val = card.columns[colIdx].trim();
+          if (val.isNotEmpty) {
+            checked++;
+            if (num.tryParse(val) != null) {
+              numCount++;
+            }
+            if (checked >= 30) break;
           }
-          if (checked >= 20) break;
         }
       }
       return checked > 0 && (numCount / checked) >= 0.7;
@@ -289,152 +433,221 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
   }
 
   void _applyFilterAndSort() {
-    List<FlashcardCard> result = List.from(_allCards);
+    final hasSearch = _searchQuery.isNotEmpty;
+    final query = _searchQuery.toLowerCase().trim();
 
-    // 1. Search Query Filter (across all columns)
-    if (_searchQuery.isNotEmpty) {
-      final query = _searchQuery.toLowerCase().trim();
-      result = result.where((card) {
+    // Map column names in _columnFilters to their column index
+    final activeColumnFilters = <int, Set<String>>{};
+    for (int colIdx = 0; colIdx < widget.columnHeaders.length; colIdx++) {
+      final header = widget.columnHeaders[colIdx];
+      final allowedSet = _columnFilters[header];
+      if (allowedSet != null) {
+        activeColumnFilters[colIdx] = allowedSet;
+      }
+    }
+    final hasColFilters = activeColumnFilters.isNotEmpty;
+
+    final typeColIdx = _getTypeColumnIndex();
+    final filterTypes = (typeColIdx != null &&
+        _allUniqueTypes.isNotEmpty &&
+        _selectedFilterTypes.length < _allUniqueTypes.length);
+
+    final cefrColIdx = _getCefrColumnIndex();
+    final filterCefr = (cefrColIdx != null &&
+        _selectedCefrLevels.length < (_allCefrLevels.length + 1));
+
+    final filterScore = !(_includeNegativeScore && _includeZeroScore && _includePositiveScore);
+
+    final hasRange = _rangeStart != null || _rangeEnd != null;
+    final rangeStart = _rangeStart ?? 1;
+    final rangeEnd = _rangeEnd ?? _allCards.length;
+
+    // Single unified filtering pass: O(N)
+    final List<FlashcardCard> result = [];
+    for (final card in _allCards) {
+      if (hasSearch) {
         final matchesCol = card.columns.any((c) => c.toLowerCase().contains(query));
         final matchesScore = card.score.toString().contains(query);
-        return matchesCol || matchesScore;
-      }).toList();
-    }
+        if (!matchesCol && !matchesScore) continue;
+      }
 
-    // 2. Type Filter (Include concept: card must contain at least 1 checked base type)
-    final typeColIdx = _getTypeColumnIndex();
-    if (typeColIdx != null && _allUniqueTypes.isNotEmpty && _selectedFilterTypes.length < _allUniqueTypes.length) {
-      result = result.where((card) {
-        final types = _getCardBaseTypes(card, typeColIdx);
-        return types.any((t) => _selectedFilterTypes.contains(t));
-      }).toList();
-    }
-
-    // 3. CEFR Filter (Multi-select)
-    final cefrColIdx = _getCefrColumnIndex();
-    if (cefrColIdx != null && _selectedCefrLevels.length < (_allCefrLevels.length + 1)) {
-      result = result.where((card) {
-        if (cefrColIdx < card.columns.length) {
-          final raw = card.columns[cefrColIdx].trim().toUpperCase();
-          if (raw.isEmpty) {
-            return _selectedCefrLevels.contains('EMPTY');
+      if (hasColFilters) {
+        bool matches = true;
+        for (final entry in activeColumnFilters.entries) {
+          final colIdx = entry.key;
+          final allowed = entry.value;
+          if (allowed.isEmpty) {
+            matches = false;
+            break;
           }
-          return _selectedCefrLevels.contains(raw);
+          final val = colIdx < card.columns.length ? card.columns[colIdx].trim() : '';
+          final checkVal = val.isEmpty ? '(Empty)' : val;
+          if (allowed.contains(checkVal)) continue;
+
+          if (val.contains(',')) {
+            final tags = val.split(',');
+            bool foundTag = false;
+            for (final tag in tags) {
+              final t = tag.trim();
+              if (t.isNotEmpty && allowed.contains(t)) {
+                foundTag = true;
+                break;
+              }
+            }
+            if (foundTag) continue;
+          }
+          matches = false;
+          break;
         }
-        return _selectedCefrLevels.contains('EMPTY');
-      }).toList();
-    }
+        if (!matches) continue;
+      }
 
-    // 4. Score Filter (3 independent categories: Negative, Zero, Positive)
-    final allScoreCategoriesChecked = _includeNegativeScore && _includeZeroScore && _includePositiveScore;
-    if (!allScoreCategoriesChecked) {
-      result = result.where((card) {
-        if (card.score < 0) return _includeNegativeScore;
-        if (card.score == 0) return _includeZeroScore;
-        return _includePositiveScore; // card.score > 0
-      }).toList();
-    }
+      if (filterTypes) {
+        final types = _getCardBaseTypes(card, typeColIdx);
+        if (!types.any((t) => _selectedFilterTypes.contains(t))) continue;
+      }
 
-    // 5. Range Filter (Berdasarkan Nomor Baris Asli Kartu / Original Row Number)
-    if (_rangeStart != null || _rangeEnd != null) {
-      final start = _rangeStart ?? 1;
-      final end = _rangeEnd ?? _allCards.length;
-      result = result.where((card) {
+      if (filterCefr) {
+        final raw = cefrColIdx < card.columns.length
+            ? card.columns[cefrColIdx].trim().toUpperCase()
+            : '';
+        final cefrVal = raw.isEmpty ? 'EMPTY' : raw;
+        if (!_selectedCefrLevels.contains(cefrVal)) continue;
+      }
+
+      if (filterScore) {
+        if (card.score < 0 && !_includeNegativeScore) continue;
+        if (card.score == 0 && !_includeZeroScore) continue;
+        if (card.score > 0 && !_includePositiveScore) continue;
+      }
+
+      if (hasRange) {
         final originalNo = _cardOriginalNumbers[card.id] ?? 0;
-        return originalNo >= start && originalNo <= end;
-      }).toList();
+        if (originalNo < rangeStart || originalNo > rangeEnd) continue;
+      }
+
+      result.add(card);
     }
 
-    // 6. Sorting
-    if (_sortColumnIndex != null) {
+    // High-performance sorting with precomputed keys (Schwartzian transform)
+    if (_sortColumnIndex != null && result.isNotEmpty) {
       final sortCol = _sortColumnIndex!;
       if (sortCol == 0) {
-        // Sort by original position / No.
-        result.sort((a, b) {
-          final noA = _cardOriginalNumbers[a.id] ?? 0;
-          final noB = _cardOriginalNumbers[b.id] ?? 0;
-          return _sortAscending ? noA.compareTo(noB) : noB.compareTo(noA);
-        });
+        final typeIdx = _getTypeColumnIndex();
+        if (typeIdx != null && _typeSortPriority.isNotEmpty) {
+          final priorityMap = <String, int>{};
+          for (int i = 0; i < _typeSortPriority.length; i++) {
+            priorityMap[_typeSortPriority[i].toUpperCase().trim()] = i;
+          }
+          final rankKeys = <String, int>{};
+          for (final card in result) {
+            rankKeys[card.id] = _getCardTopPriority(card, typeIdx, priorityMap);
+          }
+          result.sort((a, b) {
+            final rA = rankKeys[a.id] ?? 999999;
+            final rB = rankKeys[b.id] ?? 999999;
+            final comp = rA.compareTo(rB);
+            if (comp != 0) return comp;
+            final noA = _cardOriginalNumbers[a.id] ?? 0;
+            final noB = _cardOriginalNumbers[b.id] ?? 0;
+            return _sortAscending ? noA.compareTo(noB) : noB.compareTo(noA);
+          });
+        } else {
+          result.sort((a, b) {
+            final noA = _cardOriginalNumbers[a.id] ?? 0;
+            final noB = _cardOriginalNumbers[b.id] ?? 0;
+            return _sortAscending ? noA.compareTo(noB) : noB.compareTo(noA);
+          });
+        }
       } else if (sortCol == widget.columnHeaders.length + 1) {
-        // Sort by Score (pure numeric: negative, zero, positive)
         result.sort((a, b) {
           final comp = a.score.compareTo(b.score);
           return _sortAscending ? comp : -comp;
         });
       } else {
-        // Sort by Column index (sortCol - 1)
         final dataColIndex = sortCol - 1;
         final headerName = widget.columnHeaders[dataColIndex].trim().toLowerCase();
 
         if (headerName == 'type' || headerName == 'tipe') {
-          // Sort by Custom Type Priority (Drag & Drop Reordered Priority)
+          final priorityMap = <String, int>{};
+          for (int i = 0; i < _typeSortPriority.length; i++) {
+            priorityMap[_typeSortPriority[i].toUpperCase().trim()] = i;
+          }
+
+          final rankKeys = <String, int>{};
+          for (final card in result) {
+            rankKeys[card.id] = _getCardTopPriority(card, dataColIndex, priorityMap);
+          }
+
           result.sort((a, b) {
-            final tokensA = _getCardBaseTypes(a, dataColIndex);
-            final tokensB = _getCardBaseTypes(b, dataColIndex);
-
-            int rankA = 999999;
-            for (final t in tokensA) {
-              final idx = _typeSortPriority.indexOf(t);
-              if (idx != -1 && idx < rankA) rankA = idx;
-            }
-
-            int rankB = 999999;
-            for (final t in tokensB) {
-              final idx = _typeSortPriority.indexOf(t);
-              if (idx != -1 && idx < rankB) rankB = idx;
-            }
-
-            final comp = rankA.compareTo(rankB);
-            if (comp != 0) {
-              return _sortAscending ? comp : -comp;
-            }
+            final rA = rankKeys[a.id] ?? 999999;
+            final rB = rankKeys[b.id] ?? 999999;
+            final comp = rA.compareTo(rB);
+            if (comp != 0) return _sortAscending ? comp : -comp;
             final noA = _cardOriginalNumbers[a.id] ?? 0;
             final noB = _cardOriginalNumbers[b.id] ?? 0;
             return _sortAscending ? noA.compareTo(noB) : noB.compareTo(noA);
           });
         } else if (headerName == 'cefr' || headerName == 'cerf' || headerName == 'level') {
-          // Sort by CEFR Official Level Hierarchy (A1 -> A2 -> B1 -> B2 -> C1 -> C2)
+          final cefrMap = <String, int>{};
+          for (int i = 0; i < _allCefrLevels.length; i++) {
+            cefrMap[_allCefrLevels[i]] = i;
+          }
+
+          final keys = <String, int>{};
+          for (final card in result) {
+            final raw = dataColIndex < card.columns.length ? card.columns[dataColIndex].trim().toUpperCase() : '';
+            keys[card.id] = cefrMap[raw] ?? 999;
+          }
+
           result.sort((a, b) {
-            final rawA = dataColIndex < a.columns.length ? a.columns[dataColIndex].trim().toUpperCase() : '';
-            final rawB = dataColIndex < b.columns.length ? b.columns[dataColIndex].trim().toUpperCase() : '';
-
-            int rankA = _allCefrLevels.indexOf(rawA);
-            if (rankA == -1) rankA = 999;
-
-            int rankB = _allCefrLevels.indexOf(rawB);
-            if (rankB == -1) rankB = 999;
-
+            final rankA = keys[a.id] ?? 999;
+            final rankB = keys[b.id] ?? 999;
             final comp = rankA.compareTo(rankB);
-            if (comp != 0) {
-              return _sortAscending ? comp : -comp;
-            }
+            if (comp != 0) return _sortAscending ? comp : -comp;
             final noA = _cardOriginalNumbers[a.id] ?? 0;
             final noB = _cardOriginalNumbers[b.id] ?? 0;
             return _sortAscending ? noA.compareTo(noB) : noB.compareTo(noA);
           });
         } else {
           final isNumeric = _isColumnNumeric(sortCol);
-          result.sort((a, b) {
-            final valA = dataColIndex < a.columns.length ? a.columns[dataColIndex].trim() : '';
-            final valB = dataColIndex < b.columns.length ? b.columns[dataColIndex].trim() : '';
-
-            if (isNumeric) {
-              final numA = num.tryParse(valA) ?? (_sortAscending ? double.infinity : -double.infinity);
-              final numB = num.tryParse(valB) ?? (_sortAscending ? double.infinity : -double.infinity);
-              final comp = numA.compareTo(numB);
-              if (comp != 0) {
-                return _sortAscending ? comp : -comp;
-              }
-            } else {
-              final comp = valA.toLowerCase().compareTo(valB.toLowerCase());
-              if (comp != 0) {
-                return _sortAscending ? comp : -comp;
-              }
+          if (isNumeric) {
+            final numKeys = <String, num?>{};
+            for (final card in result) {
+              final val = dataColIndex < card.columns.length ? card.columns[dataColIndex].trim() : '';
+              numKeys[card.id] = num.tryParse(val);
             }
-            final noA = _cardOriginalNumbers[a.id] ?? 0;
-            final noB = _cardOriginalNumbers[b.id] ?? 0;
-            return _sortAscending ? noA.compareTo(noB) : noB.compareTo(noA);
-          });
+            result.sort((a, b) {
+              final numA = numKeys[a.id];
+              final numB = numKeys[b.id];
+              if (numA != null && numB != null) {
+                final comp = numA.compareTo(numB);
+                if (comp != 0) return _sortAscending ? comp : -comp;
+              } else if (numA != null) {
+                return _sortAscending ? -1 : 1;
+              } else if (numB != null) {
+                return _sortAscending ? 1 : -1;
+              }
+              final noA = _cardOriginalNumbers[a.id] ?? 0;
+              final noB = _cardOriginalNumbers[b.id] ?? 0;
+              return _sortAscending ? noA.compareTo(noB) : noB.compareTo(noA);
+            });
+          } else {
+            final strKeys = <String, String>{};
+            for (final card in result) {
+              final val = dataColIndex < card.columns.length ? card.columns[dataColIndex].trim() : '';
+              strKeys[card.id] = val.toLowerCase();
+            }
+            result.sort((a, b) {
+              final keyA = strKeys[a.id] ?? '';
+              final keyB = strKeys[b.id] ?? '';
+              final comp = keyA.compareTo(keyB);
+              if (comp != 0) return _sortAscending ? comp : -comp;
+              final noA = _cardOriginalNumbers[a.id] ?? 0;
+              final noB = _cardOriginalNumbers[b.id] ?? 0;
+              return _sortAscending ? noA.compareTo(noB) : noB.compareTo(noA);
+            });
+          }
         }
       }
     }
@@ -462,6 +675,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
     setState(() {
       _searchQuery = '';
       _searchController.clear();
+      _columnFilters.clear();
       _selectedFilterTypes = Set.from(_allUniqueTypes);
       _selectedCefrLevels = {'A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'EMPTY'};
       _includeNegativeScore = true;
@@ -478,6 +692,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
   }
 
   void _showRangeDialog() {
+    final lang = context.read<LanguageProvider>().currentLanguage;
     final totalCards = _allCards.length;
     final fromController = TextEditingController(text: (_rangeStart ?? 1).toString());
     final toController = TextEditingController(text: (_rangeEnd ?? totalCards).toString());
@@ -485,12 +700,12 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Row(
+        title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.linear_scale_rounded, color: Colors.blueAccent),
-            SizedBox(width: 8),
-            Flexible(child: Text('Rentang Data (Range)')),
+            const Icon(Icons.linear_scale_rounded, color: Colors.blueAccent),
+            const SizedBox(width: 8),
+            Flexible(child: Text(AppStrings.rangeDialogTitle(lang))),
           ],
         ),
         content: SizedBox(
@@ -500,7 +715,9 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Tentukan batas awal dan akhir baris data yang ingin ditampilkan dan dipelajari (Total data: $totalCards).',
+                lang == 'id'
+                    ? 'Tentukan batas awal dan akhir baris data yang ingin ditampilkan dan dipelajari (Total data: $totalCards).'
+                    : 'Set the start and end row range of data to display and study (Total cards: $totalCards).',
                 style: TextStyle(fontSize: 13, color: Colors.grey[400]),
               ),
               const SizedBox(height: 16),
@@ -510,10 +727,10 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                     child: TextField(
                       controller: fromController,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'From (Dari No.)',
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      decoration: InputDecoration(
+                        labelText: lang == 'id' ? 'Dari (No.)' : 'From (No.)',
+                        border: const OutlineInputBorder(),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                       ),
                     ),
                   ),
@@ -522,10 +739,10 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                     child: TextField(
                       controller: toController,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'To (Sampai No.)',
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      decoration: InputDecoration(
+                        labelText: lang == 'id' ? 'Sampai (No.)' : 'To (No.)',
+                        border: const OutlineInputBorder(),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                       ),
                     ),
                   ),
@@ -546,11 +763,11 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
               _saveCurrentConfig();
               Navigator.pop(dialogContext);
             },
-            child: const Text('Reset Range', style: TextStyle(color: Colors.red)),
+            child: Text(lang == 'id' ? 'Reset Rentang' : 'Reset Range', style: const TextStyle(color: Colors.red)),
           ),
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Batal'),
+            child: Text(AppStrings.cancel(lang)),
           ),
           ElevatedButton(
             onPressed: () {
@@ -575,7 +792,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
               _saveCurrentConfig();
               Navigator.pop(dialogContext);
             },
-            child: const Text('Terapkan'),
+            child: Text(lang == 'id' ? 'Terapkan' : 'Apply'),
           ),
         ],
       ),
@@ -583,19 +800,27 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
   }
 
   void _showSortDialog() {
+    final lang = context.read<LanguageProvider>().currentLanguage;
     int tempSortCol = _sortColumnIndex ?? 0;
     bool tempAscending = _sortAscending;
     List<String> tempTypePriority = List.from(_typeSortPriority);
 
     // Build available sort columns (excluding IPA)
     final availableSortColumns = <Map<String, dynamic>>[];
-    availableSortColumns.add({'index': 0, 'title': 'No. (Urutan Baris)'});
+    availableSortColumns.add({
+      'index': 0,
+      'title': lang == 'id' ? 'No. (Urutan Baris)' : 'No. (Row Order)',
+    });
 
     for (int i = 0; i < widget.columnHeaders.length; i++) {
       final header = widget.columnHeaders[i];
       if (header.trim().toLowerCase() == 'ipa') continue; // Exclude IPA
-      availableSortColumns.add({'index': i + 1, 'title': header});
+      availableSortColumns.add({
+        'index': i + 1,
+        'title': header, // Raw header from Excel
+      });
     }
+
     availableSortColumns.add({
       'index': widget.columnHeaders.length + 1,
       'title': 'Score',
@@ -610,16 +835,17 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
               ? widget.columnHeaders[tempSortCol - 1].trim().toLowerCase()
               : '';
           final isType = selectedColName == 'type' || selectedColName == 'tipe';
+          final showTypePriority = isType || tempSortCol == 0;
           final isCefr = selectedColName == 'cefr' || selectedColName == 'cerf' || selectedColName == 'level';
           final isNumeric = _isColumnNumeric(tempSortCol);
 
           return AlertDialog(
-            title: const Row(
+            title: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.swap_vert_rounded, color: Colors.blueAccent),
-                SizedBox(width: 8),
-                Flexible(child: Text('Urutkan Data (Sort)')),
+                const Icon(Icons.swap_vert_rounded, color: Colors.blueAccent),
+                const SizedBox(width: 8),
+                Flexible(child: Text(AppStrings.sortDataTitle(lang))),
               ],
             ),
             content: SizedBox(
@@ -629,9 +855,9 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      '1. Pilih Kolom untuk Diurutkan:',
-                      style: TextStyle(fontWeight: FontWeight.bold),
+                    Text(
+                      AppStrings.selectColToSort(lang),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<int>(
@@ -659,47 +885,56 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Special UI for TYPE: Reorderable Priority List
-                    if (isType && tempTypePriority.isNotEmpty) ...[
-                      const Wrap(
+                    // Special UI for TYPE / No: Reorderable Priority List
+                    if (showTypePriority && tempTypePriority.isNotEmpty) ...[
+                      Wrap(
                         crossAxisAlignment: WrapCrossAlignment.center,
                         spacing: 6,
                         runSpacing: 4,
                         children: [
-                          Icon(Icons.drag_indicator, size: 18, color: Colors.blueAccent),
+                          const Icon(Icons.drag_indicator, size: 18, color: Colors.blueAccent),
                           Text(
-                            '2. Atur Prioritas Tipe (Tarik / Drag untuk ubah urutan):',
-                            style: TextStyle(fontWeight: FontWeight.bold),
+                            AppStrings.typePriorityTitle(lang),
+                            style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Tipe paling atas memiliki prioritas tertinggi saat diurutkan.',
+                        AppStrings.typePriorityDesc(lang),
                         style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                       ),
                       const SizedBox(height: 8),
                       Container(
-                        height: 200,
+                        height: (tempTypePriority.length * 52.0).clamp(160.0, 270.0),
                         decoration: BoxDecoration(
                           border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
                           borderRadius: BorderRadius.circular(8),
                           color: Theme.of(context).cardColor,
                         ),
                         child: ReorderableListView.builder(
+                          buildDefaultDragHandles: false,
                           shrinkWrap: true,
+                          physics: const ClampingScrollPhysics(),
                           itemCount: tempTypePriority.length,
                           onReorderItem: (oldIndex, newIndex) {
                             setDialogState(() {
+                              if (oldIndex < newIndex) {
+                                newIndex -= 1;
+                              }
                               final item = tempTypePriority.removeAt(oldIndex);
                               tempTypePriority.insert(newIndex, item);
                             });
                           },
                           itemBuilder: (context, idx) {
                             final typeName = tempTypePriority[idx];
+                            final isFirst = idx == 0;
+                            final isLast = idx == tempTypePriority.length - 1;
+
                             return ListTile(
-                              key: ValueKey(typeName),
+                              key: ValueKey('type_priority_$typeName'),
                               dense: true,
+                              contentPadding: const EdgeInsets.only(left: 10, right: 4),
                               leading: Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                 decoration: BoxDecoration(
@@ -712,20 +947,70 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                                 ),
                               ),
                               title: Text(typeName, style: const TextStyle(fontWeight: FontWeight.w600)),
-                              trailing: const Icon(Icons.drag_handle, color: Colors.grey),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  // Quick Up Button (convenient on mobile)
+                                  IconButton(
+                                    icon: const Icon(Icons.arrow_upward, size: 18),
+                                    visualDensity: VisualDensity.compact,
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                                    color: isFirst ? Colors.grey.withValues(alpha: 0.25) : Colors.blueAccent,
+                                    tooltip: 'Move Up',
+                                    onPressed: isFirst
+                                        ? null
+                                        : () {
+                                            setDialogState(() {
+                                              final item = tempTypePriority.removeAt(idx);
+                                              tempTypePriority.insert(idx - 1, item);
+                                            });
+                                          },
+                                  ),
+                                  // Quick Down Button (convenient on mobile)
+                                  IconButton(
+                                    icon: const Icon(Icons.arrow_downward, size: 18),
+                                    visualDensity: VisualDensity.compact,
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                                    color: isLast ? Colors.grey.withValues(alpha: 0.25) : Colors.blueAccent,
+                                    tooltip: 'Move Down',
+                                    onPressed: isLast
+                                        ? null
+                                        : () {
+                                            setDialogState(() {
+                                              final item = tempTypePriority.removeAt(idx);
+                                              tempTypePriority.insert(idx + 1, item);
+                                            });
+                                          },
+                                  ),
+                                  const SizedBox(width: 2),
+                                  // Touch Drag Handle
+                                  ReorderableDragStartListener(
+                                    index: idx,
+                                    child: const MouseRegion(
+                                      cursor: SystemMouseCursors.grab,
+                                      child: Padding(
+                                        padding: EdgeInsets.symmetric(horizontal: 10.0, vertical: 8.0),
+                                        child: Icon(Icons.drag_handle, color: Colors.grey),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             );
                           },
                         ),
                       ),
                       const SizedBox(height: 16),
-                      const Text(
-                        '3. Arah Prioritas:',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                      Text(
+                        AppStrings.priorityDirection(lang),
+                        style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ] else ...[
-                      const Text(
-                        '2. Pilih Arah Urutan:',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                      Text(
+                        AppStrings.selectSortDirection(lang),
+                        style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ],
 
@@ -764,14 +1049,14 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                                 children: [
                                   Text(
                                     isCefr
-                                        ? 'A1 → C2 (Ascending / Level Dasar ke Mahir)'
-                                        : isType
-                                            ? 'Prioritas Teratas ke Terbawah (Ascending)'
+                                        ? (lang == 'id' ? 'A1 → C2 (Ascending / Level Dasar ke Mahir)' : 'A1 → C2 (Ascending / Basic to Advanced)')
+                                        : showTypePriority
+                                            ? (lang == 'id' ? 'Prioritas Teratas ke Terbawah (Ascending)' : 'Top Priority to Bottom (Ascending)')
                                             : isScore
-                                                ? '-100 → 0 → +100 (Ascending / Terendah ke Tertinggi)'
+                                                ? (lang == 'id' ? '-100 → 0 → +100 (Ascending / Terendah ke Tertinggi)' : '-100 → 0 → +100 (Ascending / Lowest to Highest)')
                                                 : isNumeric
-                                                    ? '0 → 9 (Ascending / Kecil ke Besar)'
-                                                    : 'A → Z (Ascending / Dari A ke Z)',
+                                                    ? (lang == 'id' ? '0 → 9 (Ascending / Kecil ke Besar)' : '0 → 9 (Ascending / Low to High)')
+                                                    : (lang == 'id' ? 'A → Z (Ascending / Dari A ke Z)' : 'A → Z (Ascending / A to Z)'),
                                     style: TextStyle(
                                       fontWeight: tempAscending ? FontWeight.bold : FontWeight.normal,
                                       color: tempAscending ? Colors.blueAccent : null,
@@ -780,14 +1065,14 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                                   const SizedBox(height: 2),
                                   Text(
                                     isCefr
-                                        ? 'Urutkan berdasarkan tingkatan level CEFR standar'
-                                        : isType
-                                            ? 'Data dengan tipe urutan teratas akan ditampilkan lebih dulu'
+                                        ? (lang == 'id' ? 'Urutkan berdasarkan tingkatan level CEFR standar' : 'Sort by standard CEFR level progression')
+                                        : showTypePriority
+                                            ? (lang == 'id' ? 'Data dengan tipe urutan teratas akan ditampilkan lebih dulu' : 'Data with top priority types will appear first')
                                             : isScore
-                                                ? 'Urutkan angka score negatif, nol, hingga positif'
+                                                ? (lang == 'id' ? 'Urutkan angka score negatif, nol, hingga positif' : 'Sort score numbers from negative to zero to positive')
                                                 : isNumeric
-                                                    ? 'Urutkan angka dari nilai terendah ke tertinggi'
-                                                    : 'Urutkan teks berdasarkan alfabet A ke Z',
+                                                    ? (lang == 'id' ? 'Urutkan angka dari nilai terendah ke tertinggi' : 'Sort numbers from lowest to highest')
+                                                    : (lang == 'id' ? 'Urutkan teks berdasarkan alfabet A ke Z' : 'Sort text alphabetically from A to Z'),
                                     style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                                   ),
                                 ],
@@ -832,14 +1117,14 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                                 children: [
                                   Text(
                                     isCefr
-                                        ? 'C2 → A1 (Descending / Level Mahir ke Dasar)'
-                                        : isType
-                                            ? 'Prioritas Terbawah ke Teratas (Descending)'
+                                        ? (lang == 'id' ? 'C2 → A1 (Descending / Level Mahir ke Dasar)' : 'C2 → A1 (Descending / Advanced to Basic)')
+                                        : showTypePriority
+                                            ? (lang == 'id' ? 'Prioritas Terbawah ke Teratas (Descending)' : 'Bottom Priority to Top (Descending)')
                                             : isScore
-                                                ? '+100 → 0 → -100 (Descending / Tertinggi ke Terendah)'
+                                                ? (lang == 'id' ? '+100 → 0 → -100 (Descending / Tertinggi ke Terendah)' : '+100 → 0 → -100 (Descending / Highest to Lowest)')
                                                 : isNumeric
-                                                    ? '9 → 0 (Descending / Besar ke Kecil)'
-                                                    : 'Z → A (Descending / Dari Z ke A)',
+                                                    ? (lang == 'id' ? '9 → 0 (Descending / Besar ke Kecil)' : '9 → 0 (Descending / High to Low)')
+                                                    : (lang == 'id' ? 'Z → A (Descending / Dari Z ke A)' : 'Z → A (Descending / Z to A)'),
                                     style: TextStyle(
                                       fontWeight: !tempAscending ? FontWeight.bold : FontWeight.normal,
                                       color: !tempAscending ? Colors.blueAccent : null,
@@ -848,14 +1133,14 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                                   const SizedBox(height: 2),
                                   Text(
                                     isCefr
-                                        ? 'Urutkan terbalik dari level tertinggi C2 ke level dasar A1'
-                                        : isType
-                                            ? 'Data dengan tipe urutan terbawah akan ditampilkan lebih dulu'
+                                        ? (lang == 'id' ? 'Urutkan terbalik dari level tertinggi C2 ke level dasar A1' : 'Sort backwards from highest level C2 to basic A1')
+                                        : showTypePriority
+                                            ? (lang == 'id' ? 'Data dengan tipe urutan terbawah akan ditampilkan lebih dulu' : 'Data with lower priority types will appear first')
                                             : isScore
-                                                ? 'Urutkan angka score positif, nol, hingga negatif'
+                                                ? (lang == 'id' ? 'Urutkan angka score positif, nol, hingga negatif' : 'Sort score numbers from positive to zero to negative')
                                                 : isNumeric
-                                                    ? 'Urutkan angka dari nilai tertinggi ke terendah'
-                                                    : 'Urutkan teks terbalik dari alfabet Z ke A',
+                                                    ? (lang == 'id' ? 'Urutkan angka dari nilai tertinggi ke terendah' : 'Sort numbers from highest to lowest')
+                                                    : (lang == 'id' ? 'Urutkan teks terbalik dari alfabet Z ke A' : 'Sort text backwards from Z to A'),
                                     style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                                   ),
                                 ],
@@ -876,31 +1161,33 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                     _sortColumnIndex = null;
                     _sortAscending = true;
                     _typeSortPriority = List.from(_allUniqueTypes);
+                    _formattedTypeCache.clear();
                     _currentPage = 0;
                   });
                   _applyFilterAndSort();
                   _saveCurrentConfig();
                   Navigator.pop(dialogContext);
                 },
-                child: const Text('Reset Sort', style: TextStyle(color: Colors.red)),
+                child: Text(lang == 'id' ? 'Reset Sort' : 'Reset Sort', style: const TextStyle(color: Colors.red)),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Batal'),
+                child: Text(AppStrings.cancel(lang)),
               ),
               ElevatedButton(
                 onPressed: () {
                   setState(() {
-                    _sortColumnIndex = (tempSortCol == 0 && tempAscending) ? null : tempSortCol;
+                    _sortColumnIndex = tempSortCol;
                     _sortAscending = tempAscending;
                     _typeSortPriority = List.from(tempTypePriority);
+                    _formattedTypeCache.clear();
                     _currentPage = 0;
                   });
                   _applyFilterAndSort();
                   _saveCurrentConfig();
                   Navigator.pop(dialogContext);
                 },
-                child: const Text('Terapkan'),
+                child: Text(lang == 'id' ? 'Terapkan' : 'Apply'),
               ),
             ],
           );
@@ -910,264 +1197,278 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
   }
 
   void _showFilterDialog() {
-    Set<String> tempTypes = Set.from(_selectedFilterTypes);
-    Set<String> tempCefr = Set.from(_selectedCefrLevels);
-    bool tempNegative = _includeNegativeScore;
-    bool tempZero = _includeZeroScore;
-    bool tempPositive = _includePositiveScore;
+    final lang = context.read<LanguageProvider>().currentLanguage;
+    final filterableColumns = [
+      ...widget.columnHeaders.where((h) => h.trim().toLowerCase() != 'ipa'),
+      'Score',
+    ];
+    if (filterableColumns.isEmpty) return;
 
-    final typeColIdx = _getTypeColumnIndex();
-    final cefrColIdx = _getCefrColumnIndex();
+    final tempFilters = <String, Set<String>>{};
+    for (final col in filterableColumns) {
+      if (col == 'Score') {
+        final scoreSet = <String>{};
+        if (_includePositiveScore) scoreSet.add('+ (Score > 0)');
+        if (_includeZeroScore) scoreSet.add('0 (Score = 0)');
+        if (_includeNegativeScore) scoreSet.add('- (Score < 0)');
+        tempFilters['Score'] = scoreSet;
+      } else if (_columnFilters.containsKey(col)) {
+        tempFilters[col] = Set.from(_columnFilters[col]!);
+      } else {
+        tempFilters[col] = Set.from(_getUniqueValuesForColumn(col));
+      }
+    }
+
+    String selectedCol;
+    if (_lastSelectedFilterColumn != null && filterableColumns.contains(_lastSelectedFilterColumn)) {
+      selectedCol = _lastSelectedFilterColumn!;
+    } else {
+      final isScoreActive = !(_includeNegativeScore && _includeZeroScore && _includePositiveScore);
+      final activeFilteredCol = isScoreActive
+          ? 'Score'
+          : filterableColumns.firstWhere(
+              (col) => _columnFilters.containsKey(col) && _columnFilters[col]!.length < _getUniqueValuesForColumn(col).length,
+              orElse: () => filterableColumns.first,
+            );
+      selectedCol = activeFilteredCol;
+      _lastSelectedFilterColumn = selectedCol;
+    }
+    String filterQuery = '';
+    final searchController = TextEditingController();
 
     showDialog(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) {
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+          final currentValues = _getUniqueValuesForColumn(selectedCol);
+          final selectedForCol = tempFilters[selectedCol] ?? Set.from(currentValues);
+          final query = filterQuery.toLowerCase().trim();
+          final displayValues = query.isEmpty
+              ? currentValues
+              : currentValues.where((v) => v.toLowerCase().contains(query)).toList();
+
           return AlertDialog(
-            title: const Row(
+            title: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.filter_alt_rounded, color: Colors.blueAccent),
-                SizedBox(width: 8),
-                Flexible(child: Text('Saring Data (Filter)')),
+                const Icon(Icons.filter_alt_rounded, color: Colors.blueAccent),
+                const SizedBox(width: 8),
+                Flexible(child: Text(AppStrings.filterDataTitle(lang))),
               ],
             ),
             content: SizedBox(
-              width: MediaQuery.of(context).size.width.clamp(280.0, 480.0),
+              width: MediaQuery.of(context).size.width.clamp(320.0, 520.0),
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // === 1. FILTER TYPE ===
-                    if (typeColIdx != null && _allUniqueTypes.isNotEmpty) ...[
-                      Wrap(
-                        alignment: WrapAlignment.spaceBetween,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        spacing: 8,
-                        runSpacing: 4,
-                        children: [
-                          const Text(
-                            '1. Filter Tipe (Type):',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                          ),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              TextButton(
-                                onPressed: () {
-                                  setDialogState(() {
-                                    tempTypes = Set.from(_allUniqueTypes);
-                                  });
-                                },
-                                style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                                child: const Text('Pilih Semua', style: TextStyle(fontSize: 12)),
-                              ),
-                              TextButton(
-                                onPressed: () {
-                                  setDialogState(() {
-                                    tempTypes.clear();
-                                  });
-                                },
-                                style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                                child: const Text('Hapus Semua', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Centang tipe yang diizinkan tampil di tabel:',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          for (final t in _allUniqueTypes)
-                            FilterChip(
-                              label: Text(t),
-                              selected: tempTypes.contains(t),
-                              selectedColor: Colors.blue.withValues(alpha: 0.2),
-                              checkmarkColor: Colors.blueAccent,
-                              onSelected: (selected) {
-                                setDialogState(() {
-                                  if (selected) {
-                                    tempTypes.add(t);
-                                  } else {
-                                    tempTypes.remove(t);
-                                  }
-                                });
-                              },
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      const Divider(),
-                      const SizedBox(height: 8),
-                    ],
-
-                    // === 2. FILTER CEFR ===
-                    if (cefrColIdx != null) ...[
-                      Wrap(
-                        alignment: WrapAlignment.spaceBetween,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        spacing: 8,
-                        runSpacing: 4,
-                        children: [
-                          const Text(
-                            '2. Filter Level CEFR:',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                          ),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              TextButton(
-                                onPressed: () {
-                                  setDialogState(() {
-                                    tempCefr = {'A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'EMPTY'};
-                                  });
-                                },
-                                style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                                child: const Text('Pilih Semua', style: TextStyle(fontSize: 12)),
-                              ),
-                              TextButton(
-                                onPressed: () {
-                                  setDialogState(() {
-                                    tempCefr.clear();
-                                  });
-                                },
-                                style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                                child: const Text('Hapus Semua', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Pilih level CEFR yang ingin ditampilkan:',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          for (final level in _allCefrLevels)
-                            FilterChip(
-                              label: Text(level, style: const TextStyle(fontWeight: FontWeight.bold)),
-                              selected: tempCefr.contains(level),
-                              selectedColor: Colors.blue.withValues(alpha: 0.2),
-                              checkmarkColor: Colors.blueAccent,
-                              onSelected: (selected) {
-                                setDialogState(() {
-                                  if (selected) {
-                                    tempCefr.add(level);
-                                  } else {
-                                    tempCefr.remove(level);
-                                  }
-                                });
-                              },
-                            ),
-                          FilterChip(
-                            label: const Text('Tanpa CEFR'),
-                            selected: tempCefr.contains('EMPTY'),
-                            selectedColor: Colors.blue.withValues(alpha: 0.2),
-                            checkmarkColor: Colors.blueAccent,
-                            onSelected: (selected) {
-                              setDialogState(() {
-                                if (selected) {
-                                  tempCefr.add('EMPTY');
-                                } else {
-                                  tempCefr.remove('EMPTY');
-                                }
-                              });
-                            },
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      const Divider(),
-                      const SizedBox(height: 8),
-                    ],
-
-                    // === 3. FILTER SCORE ===
-                    const Text(
-                      '3. Filter Kategori Score:',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                    ),
-                    const SizedBox(height: 4),
                     Text(
-                      'Pilih kategori score pemahaman kartu:',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      AppStrings.selectColToFilter(lang),
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                     ),
                     const SizedBox(height: 8),
-
-                    // Negative Score Checkbox
-                    CheckboxListTile(
-                      value: tempNegative,
-                      activeColor: Colors.blueAccent,
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      title: const Row(
-                        children: [
-                          Icon(Icons.trending_down, color: Colors.redAccent, size: 18),
-                          SizedBox(width: 8),
-                          Text('Negative (< 0)', style: TextStyle(fontWeight: FontWeight.w600)),
-                        ],
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedCol,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       ),
-                      subtitle: Text('Score bernilai minus (contoh: -1, -20, -100)', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                      items: [
+                        for (final col in filterableColumns)
+                          DropdownMenuItem<String>(
+                            value: col,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(col, style: const TextStyle(fontWeight: FontWeight.w600)),
+                                if (tempFilters.containsKey(col) && tempFilters[col]!.length < (_getUniqueValuesForColumn(col).length)) ...[
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Text(
+                                      '${tempFilters[col]!.length}/${_getUniqueValuesForColumn(col).length}',
+                                      style: const TextStyle(fontSize: 10, color: Colors.blueAccent, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                      ],
                       onChanged: (val) {
-                        setDialogState(() {
-                          tempNegative = val ?? false;
-                        });
+                        if (val != null && val != selectedCol) {
+                          _lastSelectedFilterColumn = val;
+                          _saveCurrentConfig();
+                          setDialogState(() {
+                            selectedCol = val;
+                            searchController.clear();
+                            filterQuery = '';
+                          });
+                        }
                       },
                     ),
-
-                    // Zero Score Checkbox
-                    CheckboxListTile(
-                      value: tempZero,
-                      activeColor: Colors.blueAccent,
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      title: const Row(
-                        children: [
-                          Icon(Icons.radio_button_unchecked, color: Colors.amber, size: 18),
-                          SizedBox(width: 8),
-                          Text('Zero (== 0)', style: TextStyle(fontWeight: FontWeight.w600)),
-                        ],
-                      ),
-                      subtitle: Text('Score 0 / kata baru yang belum dipelajari', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
-                      onChanged: (val) {
-                        setDialogState(() {
-                          tempZero = val ?? false;
-                        });
-                      },
+                    const SizedBox(height: 14),
+                    const Divider(),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            AppStrings.filterValuesFor(lang, selectedCol),
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            setDialogState(() {
+                              tempFilters[selectedCol] = Set.from(currentValues);
+                            });
+                          },
+                          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                          child: Text(AppStrings.selectAll(lang), style: const TextStyle(fontSize: 12)),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            setDialogState(() {
+                              tempFilters[selectedCol] = <String>{};
+                            });
+                          },
+                          style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                          child: Text(AppStrings.deselectAll(lang), style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                        ),
+                      ],
                     ),
+                    const SizedBox(height: 6),
 
-                    // Positive Score Checkbox
-                    CheckboxListTile(
-                      value: tempPositive,
-                      activeColor: Colors.blueAccent,
-                      dense: true,
-                      contentPadding: EdgeInsets.zero,
-                      title: const Row(
-                        children: [
-                          Icon(Icons.trending_up, color: Colors.green, size: 18),
-                          SizedBox(width: 8),
-                          Text('Positive (> 0)', style: TextStyle(fontWeight: FontWeight.w600)),
-                        ],
+                    // Quick Search Bar for filter values (hidden for Score)
+                    if (selectedCol != 'Score') ...[
+                      TextField(
+                        controller: searchController,
+                        decoration: InputDecoration(
+                          hintText: lang == 'id' ? 'Cari nilai dalam kolom ini...' : 'Search values in this column...',
+                          prefixIcon: const Icon(Icons.search, size: 18),
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          suffixIcon: filterQuery.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.clear, size: 16),
+                                  onPressed: () {
+                                    setDialogState(() {
+                                      searchController.clear();
+                                      filterQuery = '';
+                                    });
+                                  },
+                                )
+                              : null,
+                        ),
+                        onChanged: (val) {
+                          setDialogState(() {
+                            filterQuery = val;
+                          });
+                        },
                       ),
-                      subtitle: Text('Score bernilai positif (contoh: 1, 20, 100)', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
-                      onChanged: (val) {
-                        setDialogState(() {
-                          tempPositive = val ?? false;
-                        });
-                      },
-                    ),
+                      const SizedBox(height: 8),
+                    ],
+
+                    if (displayValues.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24.0),
+                        child: Center(
+                          child: Text(
+                            currentValues.isEmpty
+                                ? AppStrings.noValuesToFilter(lang)
+                                : (lang == 'id' ? 'Tidak ada nilai yang cocok.' : 'No matching values.'),
+                            style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                          ),
+                        ),
+                      )
+                    else
+                      // Virtualized ListView.builder for instant O(1) rendering of any dataset size
+                      Container(
+                        height: selectedCol == 'Score'
+                            ? (displayValues.length * 42.0 + 4.0)
+                            : 240.0,
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.withValues(alpha: 0.25)),
+                          borderRadius: BorderRadius.circular(8),
+                          color: Theme.of(context).cardColor,
+                        ),
+                        child: ListView.builder(
+                          itemCount: displayValues.length,
+                          itemExtent: 38.0,
+                          itemBuilder: (context, idx) {
+                            final val = displayValues[idx];
+                            final isChecked = selectedForCol.contains(val);
+                            return InkWell(
+                              onTap: () {
+                                setDialogState(() {
+                                  final set = Set<String>.from(tempFilters[selectedCol] ?? currentValues);
+                                  if (isChecked) {
+                                    set.remove(val);
+                                  } else {
+                                    set.add(val);
+                                  }
+                                  tempFilters[selectedCol] = set;
+                                });
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 10),
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 22,
+                                      height: 22,
+                                      child: Checkbox(
+                                        value: isChecked,
+                                        onChanged: (checked) {
+                                          setDialogState(() {
+                                            final set = Set<String>.from(tempFilters[selectedCol] ?? currentValues);
+                                            if (checked == true) {
+                                              set.add(val);
+                                            } else {
+                                              set.remove(val);
+                                            }
+                                            tempFilters[selectedCol] = set;
+                                          });
+                                        },
+                                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        val == '(Empty)' ? AppStrings.emptyValue(lang) : val,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontStyle: val == '(Empty)' ? FontStyle.italic : FontStyle.normal,
+                                          fontWeight: isChecked ? FontWeight.w600 : FontWeight.normal,
+                                          color: selectedCol == 'Score'
+                                              ? (val.startsWith('+')
+                                                  ? Colors.green.shade600
+                                                  : (val.startsWith('-')
+                                                      ? Colors.red.shade400
+                                                      : (isDark ? Colors.white70 : Colors.black87)))
+                                              : null,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 1,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -1176,8 +1477,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
               TextButton(
                 onPressed: () {
                   setState(() {
-                    _selectedFilterTypes = Set.from(_allUniqueTypes);
-                    _selectedCefrLevels = {'A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'EMPTY'};
+                    _columnFilters.clear();
                     _includeNegativeScore = true;
                     _includeZeroScore = true;
                     _includePositiveScore = true;
@@ -1187,27 +1487,40 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                   _saveCurrentConfig();
                   Navigator.pop(dialogContext);
                 },
-                child: const Text('Reset Filter', style: TextStyle(color: Colors.red)),
+                child: Text(AppStrings.resetFilter(lang), style: const TextStyle(color: Colors.red)),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('Batal'),
+                child: Text(AppStrings.cancel(lang)),
               ),
               ElevatedButton(
                 onPressed: () {
                   setState(() {
-                    _selectedFilterTypes = Set.from(tempTypes);
-                    _selectedCefrLevels = Set.from(tempCefr);
-                    _includeNegativeScore = tempNegative;
-                    _includeZeroScore = tempZero;
-                    _includePositiveScore = tempPositive;
+                    if (tempFilters.containsKey('Score')) {
+                      final selectedScore = tempFilters['Score']!;
+                      _includePositiveScore = selectedScore.contains('+ (Score > 0)');
+                      _includeZeroScore = selectedScore.contains('0 (Score = 0)');
+                      _includeNegativeScore = selectedScore.contains('- (Score < 0)');
+                    }
+
+                    final newFilters = <String, Set<String>>{};
+                    for (final entry in tempFilters.entries) {
+                      final col = entry.key;
+                      if (col == 'Score') continue;
+                      final selected = entry.value;
+                      final totalUnique = _getUniqueValuesForColumn(col).length;
+                      if (selected.length < totalUnique) {
+                        newFilters[col] = selected;
+                      }
+                    }
+                    _columnFilters = newFilters;
                     _currentPage = 0;
                   });
                   _applyFilterAndSort();
                   _saveCurrentConfig();
                   Navigator.pop(dialogContext);
                 },
-                child: const Text('Terapkan'),
+                child: Text(lang == 'id' ? 'Terapkan' : 'Apply'),
               ),
             ],
           );
@@ -1270,6 +1583,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
   }
 
   void _showEditCardDialog(FlashcardCard card, int displayNumber) {
+    final lang = context.read<LanguageProvider>().currentLanguage;
     final currentDeck = _getCurrentDeck();
     final columnHeaders = widget.columnHeaders;
     final Map<int, TextEditingController> controllers = {};
@@ -1290,7 +1604,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Edit Baris #$displayNumber',
+                  AppStrings.editRowTitle(lang, displayNumber),
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
               ),
@@ -1311,14 +1625,16 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
                     ),
-                    child: const Row(
+                    child: Row(
                       children: [
-                        Icon(Icons.info_outline, size: 16, color: Colors.blue),
-                        SizedBox(width: 8),
+                        const Icon(Icons.info_outline, size: 16, color: Colors.blue),
+                        const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Nomor baris (No.) adalah penomoran urut tampilan. Kolom data di bawah dapat diedit.',
-                            style: TextStyle(fontSize: 12),
+                            lang == 'id'
+                                ? 'Nomor baris (No.) adalah penomoran urut tampilan. Kolom data di bawah dapat diedit.'
+                                : 'Row number (No.) is display order. Data columns below can be edited.',
+                            style: const TextStyle(fontSize: 12),
                           ),
                         ),
                       ],
@@ -1330,7 +1646,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                     TextField(
                       controller: controllers[i],
                       decoration: InputDecoration(
-                        labelText: columnHeaders[i],
+                        labelText: AppStrings.formatColumnHeader(columnHeaders[i], lang),
                         border: const OutlineInputBorder(),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                       ),
@@ -1341,11 +1657,11 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                   TextField(
                     controller: scoreController,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Score',
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                      helperText: 'Skor pemahaman kartu flashcard',
+                    decoration: InputDecoration(
+                      labelText: AppStrings.formatColumnHeader('Score', lang),
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      helperText: lang == 'id' ? 'Skor pemahaman kartu flashcard' : 'Flashcard comprehension score',
                     ),
                   ),
                 ],
@@ -1355,11 +1671,11 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Batal'),
+              child: Text(AppStrings.cancel(lang)),
             ),
             ElevatedButton.icon(
               icon: const Icon(Icons.save, size: 18),
-              label: const Text('Simpan Perubahan'),
+              label: Text(AppStrings.saveChanges(lang)),
               onPressed: () async {
                 final originalWord = card.columns.isNotEmpty ? card.columns[0] : '';
                 final currentContext = context;
@@ -1406,7 +1722,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                 if (mounted) {
                   AppNotification.show(
                     this.context,
-                    message: 'Perubahan data berhasil disimpan',
+                    message: lang == 'id' ? 'Perubahan data berhasil disimpan' : 'Data changes saved successfully',
                     icon: Icons.check_circle_outline,
                     backgroundColor: Colors.green[800],
                   );
@@ -1455,20 +1771,28 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
   }
 
   void _confirmDelete(FlashcardCard card) {
+    final lang = context.read<LanguageProvider>().currentLanguage;
     final firstCol = card.columns.isNotEmpty ? card.columns[0] : '';
     final currentDeck = _getCurrentDeck();
+    final isCustomDb = currentDeck?.id == 'custom_mode_deck_default';
 
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Hapus Baris (Pindahkan ke Trash)'),
+        title: Text(
+          isCustomDb
+              ? (lang == 'id' ? 'Hapus Baris (Pindahkan ke Trash)' : 'Delete Row (Move to Trash)')
+              : (lang == 'id' ? 'Hapus Baris' : 'Delete Row'),
+        ),
         content: Text(
-          'Yakin ingin menghapus kata "$firstCol"?\nData ini akan dipindahkan ke Deleted Data dan dapat dikembalikan kapan saja.',
+          lang == 'id'
+              ? 'Yakin ingin menghapus kata "$firstCol"?\nData ini akan dipindahkan ke Deleted Data dan dapat dikembalikan kapan saja.'
+              : 'Are you sure you want to delete word "$firstCol"?\nThis data will be moved to Deleted Data and can be restored anytime.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Batal'),
+            child: Text(AppStrings.cancel(lang)),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -1489,7 +1813,9 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
               if (mounted) {
                 AppNotification.show(
                   context,
-                  message: 'Baris "$firstCol" dipindahkan ke Deleted Data',
+                  message: lang == 'id'
+                      ? 'Baris "$firstCol" dipindahkan ke Deleted Data'
+                      : 'Row "$firstCol" moved to Deleted Data',
                   actionLabel: 'Undo',
                   icon: Icons.delete_outline,
                   onAction: () async {
@@ -1513,7 +1839,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Hapus', style: TextStyle(color: Colors.white)),
+            child: Text(AppStrings.delete(lang), style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -1521,6 +1847,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
   }
 
   void _copyPrompt() {
+    final lang = context.read<LanguageProvider>().currentLanguage;
     final deck = _getCurrentDeck();
     List<FlashcardCard> cardsToCopy;
     if (_selectedCardIds.isNotEmpty) {
@@ -1534,9 +1861,9 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
 
     if (cardsToCopy.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Tidak ada kata untuk dibuatkan prompt.'),
-          duration: Duration(seconds: 2),
+        SnackBar(
+          content: Text(AppStrings.noWordForPrompt(lang)),
+          duration: const Duration(seconds: 2),
         ),
       );
       return;
@@ -1552,8 +1879,12 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
       SnackBar(
         content: Text(
           _selectedCardIds.isNotEmpty
-              ? 'Prompt berhasil disalin untuk ${_selectedCardIds.length} kata terpilih!'
-              : 'Prompt berhasil disalin untuk ${cardsToCopy.length} kata!',
+              ? (lang == 'id'
+                  ? 'Prompt berhasil disalin untuk ${_selectedCardIds.length} kata terpilih!'
+                  : 'Prompt copied for ${_selectedCardIds.length} selected words!')
+              : (lang == 'id'
+                  ? 'Prompt berhasil disalin untuk ${cardsToCopy.length} kata!'
+                  : 'Prompt copied for ${cardsToCopy.length} words!'),
         ),
         duration: const Duration(seconds: 2),
         backgroundColor: Colors.green,
@@ -1563,13 +1894,15 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final langProv = context.watch<LanguageProvider>();
+    final lang = langProv.currentLanguage;
     final isCustomDb = _isCustomDatabase();
     final deck = _getCurrentDeck();
 
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          deck != null ? 'Library Preview - ${deck.name}' : 'Library Preview',
+          AppStrings.libraryPreviewTitle(lang, deck?.name),
           softWrap: true,
           maxLines: 2,
           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -1591,7 +1924,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
               IconButton(
                 onPressed: _handleRefreshSource,
                 icon: const Icon(Icons.sync, size: 20),
-                tooltip: 'Refresh Source',
+                tooltip: AppStrings.refreshSource(lang),
               ),
           ],
           // Modern Copy Prompt Badge Action
@@ -1612,8 +1945,12 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                 size: 20,
               ),
               tooltip: _selectedCardIds.isNotEmpty
-                  ? 'Copy Prompt (${_selectedCardIds.length} baris terpilih)'
-                  : 'Copy Prompt (Semua ${_filteredSortedCards.length} baris preview)',
+                  ? (lang == 'id'
+                      ? 'Copy Prompt (${_selectedCardIds.length} baris terpilih)'
+                      : 'Copy Prompt (${_selectedCardIds.length} rows selected)')
+                  : (lang == 'id'
+                      ? 'Copy Prompt (Semua ${_filteredSortedCards.length} baris preview)'
+                      : 'Copy Prompt (All ${_filteredSortedCards.length} preview rows)'),
             ),
           ),
           const SizedBox(width: 4),
@@ -1654,7 +1991,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                 }
               },
               icon: const Icon(Icons.delete_outline_rounded, size: 20),
-              tooltip: 'Deleted Data (${deck?.deletedCards.length ?? 0} item)',
+              tooltip: 'Deleted Data (${deck?.deletedCards.length ?? 0} ${lang == 'id' ? 'item' : 'items'})',
             ),
           ),
           const SizedBox(width: 8),
@@ -1694,11 +2031,21 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
   }
 
   Widget _buildFilterAndSortHeader(BuildContext context) {
+    final lang = context.watch<LanguageProvider>().currentLanguage;
+    bool isAnyColFiltered = false;
+    for (final entry in _columnFilters.entries) {
+      final allVals = _getUniqueValuesForColumn(entry.key);
+      if (allVals.isNotEmpty && entry.value.length < allVals.length) {
+        isAnyColFiltered = true;
+        break;
+      }
+    }
     final isTypeFiltered = _allUniqueTypes.isNotEmpty && _selectedFilterTypes.length < _allUniqueTypes.length;
     final isCefrFiltered = _selectedCefrLevels.length < (_allCefrLevels.length + 1);
     final isScoreFiltered = !(_includeNegativeScore && _includeZeroScore && _includePositiveScore);
     final isRangeFiltered = _rangeStart != null || _rangeEnd != null;
-    final isSpecificFilterActive = isTypeFiltered || isCefrFiltered || isScoreFiltered || isRangeFiltered;
+    final isFilterActive = isAnyColFiltered || isTypeFiltered || isCefrFiltered || isScoreFiltered;
+    final isSpecificFilterActive = isFilterActive || isRangeFiltered;
     final isSorted = _sortColumnIndex != null && !(_sortColumnIndex == 0 && _sortAscending);
     final isFiltered = _searchQuery.isNotEmpty || isSpecificFilterActive || isSorted;
 
@@ -1731,7 +2078,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                 child: TextField(
                   controller: _searchController,
                   decoration: InputDecoration(
-                    hintText: 'Cari di semua kolom...',
+                    hintText: AppStrings.searchAllColumns(lang),
                     prefixIcon: const Icon(Icons.search, size: 20),
                     suffixIcon: _searchQuery.isNotEmpty
                         ? IconButton(
@@ -1764,7 +2111,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
               const SizedBox(width: 8),
               // Refine Dropdown Menu Button
               PopupMenuButton<String>(
-                tooltip: 'Refine (Sort / Filter / Range)',
+                tooltip: AppStrings.refineTooltip(lang),
                 offset: const Offset(0, 46),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 onSelected: (value) {
@@ -1787,10 +2134,10 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                           color: isSorted ? Colors.blueAccent : Colors.grey[400],
                         ),
                         const SizedBox(width: 12),
-                        const Expanded(
+                        Expanded(
                           child: Text(
-                            'Sort (Urutan Data)',
-                            style: TextStyle(fontWeight: FontWeight.w500),
+                            AppStrings.sortData(lang),
+                            style: const TextStyle(fontWeight: FontWeight.w500),
                           ),
                         ),
                         if (isSorted) ...[
@@ -1815,16 +2162,16 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                         Icon(
                           Icons.filter_alt,
                           size: 20,
-                          color: (isTypeFiltered || isCefrFiltered || isScoreFiltered) ? Colors.blueAccent : Colors.grey[400],
+                          color: isFilterActive ? Colors.blueAccent : Colors.grey[400],
                         ),
                         const SizedBox(width: 12),
-                        const Expanded(
+                        Expanded(
                           child: Text(
-                            'Filter (Saring Data)',
-                            style: TextStyle(fontWeight: FontWeight.w500),
+                            AppStrings.filterData(lang),
+                            style: const TextStyle(fontWeight: FontWeight.w500),
                           ),
                         ),
-                        if (isTypeFiltered || isCefrFiltered || isScoreFiltered) ...[
+                        if (isFilterActive) ...[
                           const SizedBox(width: 8),
                           Container(
                             width: 8,
@@ -1849,10 +2196,10 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                           color: isRangeFiltered ? Colors.blueAccent : Colors.grey[400],
                         ),
                         const SizedBox(width: 12),
-                        const Expanded(
+                        Expanded(
                           child: Text(
-                            'Range (Rentang Data)',
-                            style: TextStyle(fontWeight: FontWeight.w500),
+                            AppStrings.rangeData(lang),
+                            style: const TextStyle(fontWeight: FontWeight.w500),
                           ),
                         ),
                         if (isRangeFiltered) ...[
@@ -1894,7 +2241,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        'Refine',
+                        AppStrings.refine(lang),
                         style: TextStyle(
                           fontWeight: (isSorted || isSpecificFilterActive) ? FontWeight.bold : FontWeight.normal,
                           color: (isSorted || isSpecificFilterActive) ? Colors.blueAccent : null,
@@ -1915,7 +2262,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                 IconButton(
                   onPressed: _resetFilters,
                   icon: const Icon(Icons.refresh_rounded, color: Colors.red),
-                  tooltip: 'Reset Semua Filter, Sort & Range',
+                  tooltip: lang == 'id' ? 'Reset Semua Filter, Sort & Range' : 'Reset All Filters, Sort & Range',
                 ),
               ],
             ],
@@ -1936,7 +2283,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                     sortLabel = 'Sort: No. (${_sortAscending ? "1→${_allCards.length}" : "${_allCards.length}→1"})';
                     sortIcon = _sortAscending ? Icons.arrow_upward : Icons.arrow_downward;
                   } else if (isSortType) {
-                    sortLabel = 'Sort: Type (${_sortAscending ? "Prioritas #1" : "Prioritas Terbalik"})';
+                    sortLabel = 'Sort: Type (${_sortAscending ? (lang == 'id' ? "Prioritas #1" : "Priority #1") : (lang == 'id' ? "Prioritas Terbalik" : "Reverse Priority")})';
                     sortIcon = Icons.sort;
                   } else if (isSortCefr) {
                     sortLabel = 'Sort: CEFR (${_sortAscending ? "A1→C2" : "C2→A1"})';
@@ -1968,7 +2315,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                 if (_searchQuery.isNotEmpty) {
                   activeItems.add(_ActiveFilterItem(
                     icon: Icons.search,
-                    label: 'Cari: "$_searchQuery"',
+                    label: '${lang == 'id' ? 'Cari' : 'Search'}: "$_searchQuery"',
                     onDeleted: () {
                       _searchController.clear();
                       setState(() {
@@ -1982,7 +2329,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                 if (isTypeFiltered) {
                   activeItems.add(_ActiveFilterItem(
                     icon: Icons.category_rounded,
-                    label: 'Type: ${_selectedFilterTypes.length}/${_allUniqueTypes.length} dipilih',
+                    label: 'Type: ${_selectedFilterTypes.length}/${_allUniqueTypes.length} ${lang == 'id' ? 'dipilih' : 'selected'}',
                     onDeleted: () {
                       setState(() {
                         _selectedFilterTypes = Set.from(_allUniqueTypes);
@@ -2027,6 +2374,26 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                   ));
                 }
 
+                for (final entry in _columnFilters.entries) {
+                  final header = entry.key;
+                  final selectedVals = entry.value;
+                  final allVals = _getUniqueValuesForColumn(header);
+                  if (selectedVals.length < allVals.length) {
+                    activeItems.add(_ActiveFilterItem(
+                      icon: Icons.filter_list_rounded,
+                      label: '$header: ${selectedVals.length}/${allVals.length} ${lang == "id" ? "dipilih" : "selected"}',
+                      onDeleted: () {
+                        setState(() {
+                          _columnFilters.remove(header);
+                          _currentPage = 0;
+                        });
+                        _applyFilterAndSort();
+                        _saveCurrentConfig();
+                      },
+                    ));
+                  }
+                }
+
                 if (isRangeFiltered) {
                   activeItems.add(_ActiveFilterItem(
                     icon: Icons.linear_scale_rounded,
@@ -2051,12 +2418,12 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                     if (isCompact) {
                       return Row(
                         children: [
-                          const Text(
-                            'Aktif: ',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                          Text(
+                            AppStrings.activeFilter(lang),
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                           ),
                           PopupMenuButton<VoidCallback>(
-                            tooltip: 'Lihat & Kelola Filter Aktif',
+                            tooltip: AppStrings.manageActiveFilters(lang),
                             offset: const Offset(0, 36),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             onSelected: (callback) => callback(),
@@ -2082,14 +2449,14 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                               const PopupMenuDivider(),
                               PopupMenuItem<VoidCallback>(
                                 value: _resetFilters,
-                                child: const Row(
+                                child: Row(
                                   children: [
-                                    Icon(Icons.refresh_rounded, size: 16, color: Colors.red),
-                                    SizedBox(width: 10),
+                                    const Icon(Icons.refresh_rounded, size: 16, color: Colors.red),
+                                    const SizedBox(width: 10),
                                     Expanded(
                                       child: Text(
-                                        'Reset Semua Filter',
-                                        style: TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.bold),
+                                        AppStrings.resetAllFilters(lang),
+                                        style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.bold),
                                       ),
                                     ),
                                   ],
@@ -2109,7 +2476,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                                   const Icon(Icons.tune_rounded, size: 14, color: Colors.blueAccent),
                                   const SizedBox(width: 6),
                                   Text(
-                                    '${activeItems.length} Kriteria Aktif',
+                                    AppStrings.criteriaActive(lang, activeItems.length),
                                     style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blueAccent),
                                   ),
                                   const SizedBox(width: 4),
@@ -2127,7 +2494,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                       runSpacing: 4,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
-                        const Text('Aktif:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        Text(AppStrings.activeFilter(lang), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                         for (final item in activeItems)
                           Chip(
                             avatar: Icon(item.icon, size: 16, color: Colors.blueAccent),
@@ -2160,6 +2527,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
   }
 
   Widget _buildDataPreviewTable(BuildContext context) {
+    final lang = context.watch<LanguageProvider>().currentLanguage;
     final startIdx = _currentPage * _rowsPerPage;
     final endIdx = ((startIdx + _rowsPerPage) < _filteredSortedCards.length)
         ? (startIdx + _rowsPerPage)
@@ -2185,9 +2553,9 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text(
-                      '👀 Data Preview',
-                      style: TextStyle(
+                    Text(
+                      AppStrings.dataPreview(lang),
+                      style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
@@ -2248,7 +2616,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        '${_selectedCardIds.length} baris dipilih',
+                        '${_selectedCardIds.length} ${lang == 'id' ? "baris dipilih" : "rows selected"}',
                         style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 12),
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
@@ -2273,12 +2641,14 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
             ],
             const SizedBox(height: 12),
             if (pageCards.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(32.0),
+              Padding(
+                padding: const EdgeInsets.all(32.0),
                 child: Center(
                   child: Text(
-                    'Tidak ada data yang cocok dengan kriteria pencarian/filter.',
-                    style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey),
+                    lang == 'id'
+                        ? 'Tidak ada data yang cocok dengan kriteria pencarian/filter.'
+                        : 'No data matches the search/filter criteria.',
+                    style: const TextStyle(fontStyle: FontStyle.italic, color: Colors.grey),
                   ),
                 ),
               )
@@ -2306,11 +2676,17 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                         onSort: (colIdx, asc) => _onSort(i + 1, asc),
                       ),
                     DataColumn(
-                      label: const Text('Score', style: TextStyle(fontWeight: FontWeight.bold)),
+                      label: const Text(
+                        'Score',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
                       onSort: (colIdx, asc) => _onSort(widget.columnHeaders.length + 1, asc),
                     ),
-                    const DataColumn(
-                      label: Text('Aksi', style: TextStyle(fontWeight: FontWeight.bold)),
+                    DataColumn(
+                      label: Text(
+                        AppStrings.tableAction(lang),
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ],
                   rows: [
@@ -2326,6 +2702,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
   }
 
   DataRow _createDataRow(FlashcardCard card, int absoluteIndex) {
+    final lang = context.read<LanguageProvider>().currentLanguage;
     final originalNo = _cardOriginalNumbers[card.id] ?? absoluteIndex;
     final columns = card.allColumns;
     final isCustomDb = _isCustomDatabase();
@@ -2341,8 +2718,10 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
         DataCell(
           Tooltip(
             message: _selectedCardIds.isEmpty
-                ? 'Tekan lama untuk mengaktifkan mode pilih'
-                : (isSelected ? 'Klik untuk batal pilih' : 'Klik untuk memilih baris'),
+                ? (lang == 'id' ? 'Tekan lama untuk mengaktifkan mode pilih' : 'Long press to enable selection mode')
+                : (isSelected
+                    ? (lang == 'id' ? 'Klik untuk batal pilih' : 'Click to deselect')
+                    : (lang == 'id' ? 'Klik untuk memilih baris' : 'Click to select row')),
             child: InkWell(
               onLongPress: () {
                 setState(() {
@@ -2400,13 +2779,45 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8.0),
                 child: Text(
-                  i < columns.length ? columns[i] : '',
+                  i < columns.length
+                      ? (i == _getTypeColumnIndex() ? _formatCardType(columns[i]) : columns[i])
+                      : '',
                   softWrap: true,
                 ),
               ),
             ),
           ),
-        DataCell(Text(card.score.toString())),
+        DataCell(
+          Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: card.score > 0
+                    ? Colors.green.withValues(alpha: 0.15)
+                    : (card.score < 0
+                        ? Colors.red.withValues(alpha: 0.15)
+                        : (isDark ? Colors.white10 : Colors.grey.shade200)),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: card.score > 0
+                      ? Colors.green.shade600
+                      : (card.score < 0 ? Colors.red.shade400 : Colors.grey.shade400),
+                  width: 1,
+                ),
+              ),
+              child: Text(
+                card.score.toString(),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                  color: card.score > 0
+                      ? Colors.green.shade700
+                      : (card.score < 0 ? Colors.red.shade700 : (isDark ? Colors.white70 : Colors.black87)),
+                ),
+              ),
+            ),
+          ),
+        ),
         DataCell(
           Row(
             mainAxisSize: MainAxisSize.min,
@@ -2415,17 +2826,19 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                 IconButton(
                   icon: const Icon(Icons.sync, color: Colors.blueAccent, size: 20),
                   onPressed: () => _handleRefreshSingleCard(card),
-                  tooltip: 'Refresh baris ini dari dataset sumber',
+                  tooltip: lang == 'id' ? 'Refresh baris ini dari dataset sumber' : 'Refresh this row from source dataset',
                 ),
               IconButton(
                 icon: const Icon(Icons.edit_outlined, color: Colors.amber, size: 20),
                 onPressed: () => _showEditCardDialog(card, originalNo),
-                tooltip: 'Edit data baris ini',
+                tooltip: lang == 'id' ? 'Edit data baris ini' : 'Edit this row',
               ),
               IconButton(
                 icon: const Icon(Icons.close, color: Colors.red, size: 20),
                 onPressed: () => _confirmDelete(card),
-                tooltip: isCustomDb ? 'Pindahkan ke Deleted Data' : 'Hapus baris',
+                tooltip: isCustomDb
+                    ? (lang == 'id' ? 'Pindahkan ke Deleted Data' : 'Move to Deleted Data')
+                    : (lang == 'id' ? 'Hapus baris' : 'Delete row'),
               ),
             ],
           ),
@@ -2435,17 +2848,18 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
   }
 
   void _showJumpToPageDialog(int totalPages) {
+    final lang = context.read<LanguageProvider>().currentLanguage;
     final pageController = TextEditingController(text: ''); // blank/empty by default
 
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Row(
+        title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.find_in_page_rounded, color: Colors.blueAccent),
-            SizedBox(width: 8),
-            Flexible(child: Text('Lompat ke Halaman')),
+            const Icon(Icons.find_in_page_rounded, color: Colors.blueAccent),
+            const SizedBox(width: 8),
+            Flexible(child: Text(AppStrings.jumpToPage(lang))),
           ],
         ),
         content: SizedBox(
@@ -2455,7 +2869,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Masukkan nomor halaman (1 s/d $totalPages):',
+                AppStrings.enterPageNumber(lang, totalPages),
                 style: const TextStyle(fontSize: 13),
               ),
               const SizedBox(height: 12),
@@ -2464,7 +2878,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                 autofocus: true,
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
-                  hintText: 'Ketik nomor halaman...',
+                  hintText: AppStrings.typePageNumber(lang),
                   border: const OutlineInputBorder(),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   suffixText: '/ $totalPages',
@@ -2479,13 +2893,13 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Batal'),
+            child: Text(AppStrings.cancel(lang)),
           ),
           ElevatedButton(
             onPressed: () {
               _handleJump(pageController.text, totalPages, dialogContext);
             },
-            child: const Text('Lanjut'),
+            child: Text(AppStrings.go(lang)),
           ),
         ],
       ),
@@ -2506,6 +2920,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
   Widget _buildPaginationControls(BuildContext context) {
     if (_filteredSortedCards.isEmpty) return const SizedBox.shrink();
 
+    final lang = context.watch<LanguageProvider>().currentLanguage;
     final totalRows = _filteredSortedCards.length;
     final totalPages = (totalRows + _rowsPerPage - 1) ~/ _rowsPerPage;
     final startIdx = _currentPage * _rowsPerPage + 1;
@@ -2520,7 +2935,9 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
       runSpacing: 8,
       children: [
         Text(
-          'Showing $startIdx - $endIdx of $totalRows entries',
+          lang == 'id'
+              ? 'Menampilkan $startIdx - $endIdx dari $totalRows data'
+              : 'Showing $startIdx - $endIdx of $totalRows entries',
           style: TextStyle(fontSize: 13, color: Colors.grey[600]),
         ),
         Row(
@@ -2529,7 +2946,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
             IconButton(
               icon: const Icon(Icons.chevron_left),
               onPressed: _currentPage > 0 ? () => setState(() => _currentPage--) : null,
-              tooltip: 'Halaman Sebelumnya',
+              tooltip: lang == 'id' ? 'Halaman Sebelumnya' : 'Previous Page',
             ),
             InkWell(
               onTap: () => _showJumpToPageDialog(totalPages),
@@ -2545,7 +2962,9 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'Page ${_currentPage + 1} of $totalPages',
+                      lang == 'id'
+                          ? 'Halaman ${_currentPage + 1} dari $totalPages'
+                          : 'Page ${_currentPage + 1} of $totalPages',
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.blueAccent),
                     ),
                     const SizedBox(width: 4),
@@ -2557,7 +2976,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
             IconButton(
               icon: const Icon(Icons.chevron_right),
               onPressed: _currentPage < (totalPages - 1) ? () => setState(() => _currentPage++) : null,
-              tooltip: 'Halaman Berikutnya',
+              tooltip: lang == 'id' ? 'Halaman Berikutnya' : 'Next Page',
             ),
           ],
         ),
@@ -2566,6 +2985,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
   }
 
   Widget _buildActionButtons(BuildContext context) {
+    final lang = context.watch<LanguageProvider>().currentLanguage;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -2586,7 +3006,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
-              child: const Text('Close'),
+              child: Text(AppStrings.close(lang)),
             ),
           ),
         ],

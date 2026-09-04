@@ -10,6 +10,8 @@ class DeckConfig {
   final Set<String> selectedFilterTypes;
   final Set<String> selectedFilterCefr;
   final Set<String> selectedFilterScore;
+  final Map<String, Set<String>> columnFilters;
+  final String? lastSelectedFilterColumn;
   final int? rangeStart;
   final int? rangeEnd;
   final OrderMode orderMode;
@@ -24,6 +26,8 @@ class DeckConfig {
     this.selectedFilterTypes = const {},
     this.selectedFilterCefr = const {},
     this.selectedFilterScore = const {},
+    this.columnFilters = const {},
+    this.lastSelectedFilterColumn,
     this.rangeStart,
     this.rangeEnd,
     this.orderMode = OrderMode.normal,
@@ -39,6 +43,8 @@ class DeckConfig {
     Set<String>? selectedFilterTypes,
     Set<String>? selectedFilterCefr,
     Set<String>? selectedFilterScore,
+    Map<String, Set<String>>? columnFilters,
+    String? lastSelectedFilterColumn,
     int? rangeStart,
     int? rangeEnd,
     OrderMode? orderMode,
@@ -46,6 +52,7 @@ class DeckConfig {
     bool clearCefrSort = false,
     bool clearScoreSort = false,
     bool clearRange = false,
+    bool clearLastSelectedFilterColumn = false,
   }) {
     return DeckConfig(
       deckId: deckId ?? this.deckId,
@@ -57,6 +64,10 @@ class DeckConfig {
       selectedFilterTypes: selectedFilterTypes != null ? Set.from(selectedFilterTypes) : Set.from(this.selectedFilterTypes),
       selectedFilterCefr: selectedFilterCefr != null ? Set.from(selectedFilterCefr) : Set.from(this.selectedFilterCefr),
       selectedFilterScore: selectedFilterScore != null ? Set.from(selectedFilterScore) : Set.from(this.selectedFilterScore),
+      columnFilters: columnFilters != null
+          ? Map.from(columnFilters.map((k, v) => MapEntry(k, Set<String>.from(v))))
+          : Map.from(this.columnFilters.map((k, v) => MapEntry(k, Set<String>.from(v)))),
+      lastSelectedFilterColumn: clearLastSelectedFilterColumn ? null : (lastSelectedFilterColumn ?? this.lastSelectedFilterColumn),
       rangeStart: clearRange ? null : (rangeStart ?? this.rangeStart),
       rangeEnd: clearRange ? null : (rangeEnd ?? this.rangeEnd),
       orderMode: orderMode ?? this.orderMode,
@@ -74,6 +85,8 @@ class DeckConfig {
       'selectedFilterTypes': selectedFilterTypes.toList(),
       'selectedFilterCefr': selectedFilterCefr.toList(),
       'selectedFilterScore': selectedFilterScore.toList(),
+      'columnFilters': columnFilters.map((k, v) => MapEntry(k, v.toList())),
+      'lastSelectedFilterColumn': lastSelectedFilterColumn,
       'rangeStart': rangeStart,
       'rangeEnd': rangeEnd,
       'orderMode': orderMode.name,
@@ -88,6 +101,16 @@ class DeckConfig {
         (m) => m.name == modeName,
         orElse: () => OrderMode.normal,
       );
+    }
+
+    Map<String, Set<String>> parsedColumnFilters = {};
+    if (json.containsKey('columnFilters') && json['columnFilters'] is Map) {
+      final rawMap = json['columnFilters'] as Map<String, dynamic>;
+      rawMap.forEach((key, value) {
+        if (value is List) {
+          parsedColumnFilters[key] = value.map((e) => e.toString()).toSet();
+        }
+      });
     }
 
     return DeckConfig(
@@ -112,6 +135,8 @@ class DeckConfig {
               ?.map((e) => e.toString())
               .toSet() ??
           {},
+      columnFilters: parsedColumnFilters,
+      lastSelectedFilterColumn: json['lastSelectedFilterColumn'] as String?,
       rangeStart: json['rangeStart'] as int?,
       rangeEnd: json['rangeEnd'] as int?,
       orderMode: parsedMode,

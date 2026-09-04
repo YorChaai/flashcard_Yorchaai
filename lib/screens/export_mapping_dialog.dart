@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../models/deck.dart';
+import '../providers/language_provider.dart';
 import '../services/excel_service.dart';
+import '../utils/app_strings.dart';
 
 class ExportColumnItem {
   final int index;
@@ -85,11 +88,12 @@ class _ExportMappingDialogState extends State<ExportMappingDialog> {
   }
 
   void _onExport() {
+    final lang = context.read<LanguageProvider>().currentLanguage;
     final enabledItems = _items.where((it) => it.isEnabled).toList();
     if (enabledItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Pilih setidaknya 1 kolom untuk diekspor.'),
+        SnackBar(
+          content: Text(AppStrings.selectAtLeastOneColumn(lang)),
           backgroundColor: Colors.orange,
         ),
       );
@@ -127,18 +131,19 @@ class _ExportMappingDialogState extends State<ExportMappingDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageProvider>().currentLanguage;
     final enabledCount = _items.where((it) => it.isEnabled).length;
 
     return AlertDialog(
-      title: const Row(
+      title: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.tune_rounded, color: Colors.blueAccent),
-          SizedBox(width: 10),
+          const Icon(Icons.tune_rounded, color: Colors.blueAccent),
+          const SizedBox(width: 10),
           Flexible(
             child: Text(
-              'Pengaturan Kolom Export Excel',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              AppStrings.exportSettingsTitle(lang),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
           ),
         ],
@@ -151,24 +156,24 @@ class _ExportMappingDialogState extends State<ExportMappingDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Custom File Name Field
-              const Text(
-                'Nama File Hasil Export:',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+              Text(
+                AppStrings.exportFileName(lang),
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 6),
               TextField(
                 controller: _fileNameController,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: InputDecoration(
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   suffixText: '.xlsx',
-                  hintText: 'Ketik nama file...',
+                  hintText: lang == 'id' ? 'Ketik nama file...' : 'Type file name...',
                   isDense: true,
                 ),
               ),
               const SizedBox(height: 16),
               Text(
-                'Tarik (drag) untuk mengubah urutan kolom. Centang kolom yang ingin diekspor.',
+                AppStrings.exportDragHint(lang),
                 style: TextStyle(fontSize: 13, color: Colors.grey[400]),
               ),
               const SizedBox(height: 10),
@@ -180,7 +185,7 @@ class _ExportMappingDialogState extends State<ExportMappingDialog> {
                   OutlinedButton.icon(
                     onPressed: () => _selectAll(true),
                     icon: const Icon(Icons.select_all, size: 16),
-                    label: const Text('Pilih Semua', style: TextStyle(fontSize: 12)),
+                    label: Text(AppStrings.selectAll(lang), style: const TextStyle(fontSize: 12)),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       visualDensity: VisualDensity.compact,
@@ -189,7 +194,7 @@ class _ExportMappingDialogState extends State<ExportMappingDialog> {
                   OutlinedButton.icon(
                     onPressed: () => _selectAll(false),
                     icon: const Icon(Icons.deselect, size: 16),
-                    label: const Text('Hapus Semua', style: TextStyle(fontSize: 12)),
+                    label: Text(AppStrings.deselectAll(lang), style: const TextStyle(fontSize: 12)),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       visualDensity: VisualDensity.compact,
@@ -198,7 +203,7 @@ class _ExportMappingDialogState extends State<ExportMappingDialog> {
                   OutlinedButton.icon(
                     onPressed: _resetOrder,
                     icon: const Icon(Icons.restart_alt_rounded, size: 16),
-                    label: const Text('Reset Urutan', style: TextStyle(fontSize: 12)),
+                    label: Text(AppStrings.resetOrder(lang), style: const TextStyle(fontSize: 12)),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       visualDensity: VisualDensity.compact,
@@ -216,10 +221,15 @@ class _ExportMappingDialogState extends State<ExportMappingDialog> {
                   color: Theme.of(context).cardColor,
                 ),
                 child: ReorderableListView.builder(
+                  buildDefaultDragHandles: false,
+                  physics: const ClampingScrollPhysics(),
                   shrinkWrap: true,
                   itemCount: _items.length,
                   onReorderItem: (oldIndex, newIndex) {
                     setState(() {
+                      if (oldIndex < newIndex) {
+                        newIndex -= 1;
+                      }
                       final item = _items.removeAt(oldIndex);
                       _items.insert(newIndex, item);
                     });
@@ -260,7 +270,7 @@ class _ExportMappingDialogState extends State<ExportMappingDialog> {
                                 children: [
                                   Flexible(
                                     child: Text(
-                                      item.title,
+                                      AppStrings.formatColumnHeader(item.title, lang),
                                       style: TextStyle(
                                         fontWeight: FontWeight.w600,
                                         fontSize: 14,
@@ -279,14 +289,14 @@ class _ExportMappingDialogState extends State<ExportMappingDialog> {
                                         borderRadius: BorderRadius.circular(6),
                                         border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
                                       ),
-                                      child: const Row(
+                                      child: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          Icon(Icons.stars_rounded, size: 13, color: Colors.amber),
-                                          SizedBox(width: 4),
+                                          const Icon(Icons.stars_rounded, size: 13, color: Colors.amber),
+                                          const SizedBox(width: 4),
                                           Text(
-                                            'Skor Kartu',
-                                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber),
+                                            lang == 'id' ? 'Skor Kartu' : 'Card Score',
+                                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber),
                                           ),
                                         ],
                                       ),
@@ -306,7 +316,7 @@ class _ExportMappingDialogState extends State<ExportMappingDialog> {
                                   border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.3)),
                                 ),
                                 child: Text(
-                                  'Kolom $colNumber',
+                                  lang == 'id' ? 'Kolom $colNumber' : 'Column $colNumber',
                                   style: const TextStyle(
                                     fontSize: 11,
                                     fontWeight: FontWeight.bold,
@@ -322,16 +332,61 @@ class _ExportMappingDialogState extends State<ExportMappingDialog> {
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
-                                  'Dilewati',
+                                  lang == 'id' ? 'Dilewati' : 'Skipped',
                                   style: TextStyle(fontSize: 11, color: Colors.grey[500]),
                                 ),
                               ),
-                            const SizedBox(width: 8),
-                            // Drag Handle
-                            const Icon(
-                              Icons.drag_indicator_rounded,
-                              size: 20,
-                              color: Colors.grey,
+                            const SizedBox(width: 4),
+                            // Quick Up/Down Buttons & Drag Handle
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.arrow_upward, size: 18),
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+                                  color: index == 0 ? Colors.grey.withValues(alpha: 0.25) : Colors.blueAccent,
+                                  onPressed: index == 0
+                                      ? null
+                                      : () {
+                                          setState(() {
+                                            final itm = _items.removeAt(index);
+                                            _items.insert(index - 1, itm);
+                                          });
+                                        },
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.arrow_downward, size: 18),
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+                                  color: index == _items.length - 1 ? Colors.grey.withValues(alpha: 0.25) : Colors.blueAccent,
+                                  onPressed: index == _items.length - 1
+                                      ? null
+                                      : () {
+                                          setState(() {
+                                            final itm = _items.removeAt(index);
+                                            _items.insert(index + 1, itm);
+                                          });
+                                        },
+                                ),
+                                const SizedBox(width: 2),
+                                ReorderableDragStartListener(
+                                  index: index,
+                                  child: const MouseRegion(
+                                    cursor: SystemMouseCursors.grab,
+                                    child: Padding(
+                                      padding: EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
+                                      child: Icon(
+                                        Icons.drag_indicator_rounded,
+                                        size: 20,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -343,7 +398,7 @@ class _ExportMappingDialogState extends State<ExportMappingDialog> {
               const SizedBox(height: 12),
               // Info Footer
               Text(
-                '$enabledCount dari ${_items.length} kolom akan diekspor ke file Excel.',
+                AppStrings.exportFooterInfo(lang, enabledCount, _items.length),
                 style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.blueAccent),
               ),
             ],
@@ -353,7 +408,7 @@ class _ExportMappingDialogState extends State<ExportMappingDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Batal'),
+          child: Text(AppStrings.cancel(lang)),
         ),
         ElevatedButton.icon(
           onPressed: enabledCount > 0 ? _onExport : null,

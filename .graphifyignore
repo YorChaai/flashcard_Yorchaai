@@ -1,0 +1,16 @@
+# Flutter & Dart builds
+.dart_tool/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# Platform native folders
+android/
+ios/
+web/
+windows/
+linux/
+macos/
+
+# Test cache & temporary assets
+test/.test_coverage/

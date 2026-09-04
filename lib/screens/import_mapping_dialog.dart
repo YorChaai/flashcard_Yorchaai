@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/language_provider.dart';
 import '../services/excel_service.dart';
+import '../utils/app_strings.dart';
 
 class ImportMappingDialog extends StatefulWidget {
   final FileMetadata metadata;
@@ -41,7 +44,7 @@ class _ImportMappingDialogState extends State<ImportMappingDialog> {
     }
   }
 
-  String _getPreviewText(int colIndex) {
+  String _getPreviewText(int colIndex, String lang) {
     List<String> values = [];
     for (var rowMap in widget.metadata.previewData) {
       List<String> row = rowMap['columns'] as List<String>? ?? [];
@@ -51,18 +54,19 @@ class _ImportMappingDialogState extends State<ImportMappingDialog> {
         }
       }
     }
-    if (values.isEmpty) return '(Kosong)';
+    if (values.isEmpty) return lang == 'id' ? '(Kosong)' : '(Empty)';
     return values.take(5).join(', ');
   }
 
   void _onProceed() {
+    final lang = context.read<LanguageProvider>().currentLanguage;
     // Validate mapping
     final selectedSet = <int>{};
     for (int i = 0; i < _numFlashcardColumns; i++) {
       final col = _selectedExcelColumns[i];
       if (col != null) {
         if (selectedSet.contains(col)) {
-          _showError('Kolom Excel "${widget.metadata.columnHeaders[col]}" dipilih lebih dari satu kali!');
+          _showError(AppStrings.duplicateExcelColumn(lang, widget.metadata.columnHeaders[col]));
           return;
         }
         selectedSet.add(col);
@@ -70,7 +74,7 @@ class _ImportMappingDialogState extends State<ImportMappingDialog> {
     }
 
     if (selectedSet.isEmpty) {
-      _showError('Pilih minimal satu kolom Excel untuk diimpor.');
+      _showError(AppStrings.selectAtLeastOneImport(lang));
       return;
     }
 
@@ -91,8 +95,10 @@ class _ImportMappingDialogState extends State<ImportMappingDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageProvider>().currentLanguage;
+
     return AlertDialog(
-      title: const Text('Map Import Columns'),
+      title: Text(AppStrings.importMappingTitle(lang)),
       content: SizedBox(
         width: 500, // Fixed max width so it doesn't get too wide
         child: SingleChildScrollView(
@@ -100,16 +106,21 @@ class _ImportMappingDialogState extends State<ImportMappingDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Pilih berapa banyak kolom Flashcard yang ingin dibuat, lalu petakan ke kolom Excel yang sesuai.',
-                style: TextStyle(fontSize: 14),
+              Text(
+                lang == 'id'
+                    ? 'Pilih berapa banyak kolom Flashcard yang ingin dibuat, lalu petakan ke kolom Excel yang sesuai.'
+                    : 'Choose how many Flashcard columns to create, then map them to the corresponding Excel columns.',
+                style: const TextStyle(fontSize: 14),
               ),
               const SizedBox(height: 16),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  const Expanded(
-                    child: Text('Jumlah Kolom Flashcard:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  Expanded(
+                    child: Text(
+                      lang == 'id' ? 'Jumlah Kolom Flashcard:' : 'Number of Flashcard Columns:',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   DropdownButton<int>(
@@ -118,7 +129,10 @@ class _ImportMappingDialogState extends State<ImportMappingDialog> {
                       widget.metadata.columnHeaders.isNotEmpty ? widget.metadata.columnHeaders.length : 1,
                       (index) => index + 1,
                     ).map((val) {
-                      return DropdownMenuItem(value: val, child: Text('$val Kolom'));
+                      return DropdownMenuItem(
+                        value: val,
+                        child: Text(lang == 'id' ? '$val Kolom' : '$val Columns'),
+                      );
                     }).toList(),
                     onChanged: (val) {
                       if (val != null) {
@@ -143,7 +157,7 @@ class _ImportMappingDialogState extends State<ImportMappingDialog> {
                         child: Padding(
                           padding: const EdgeInsets.only(top: 14.0),
                           child: Text(
-                            'Kolom ${i + 1}',
+                            lang == 'id' ? 'Kolom ${i + 1}' : 'Column ${i + 1}',
                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                           ),
                         ),
@@ -167,14 +181,17 @@ class _ImportMappingDialogState extends State<ImportMappingDialog> {
                                   isExpanded: true,
                                   value: _selectedExcelColumns[i],
                                   items: [
-                                    const DropdownMenuItem<int?>(
+                                    DropdownMenuItem<int?>(
                                       value: null,
-                                      child: Text('(Kosong / Abaikan)'),
+                                      child: Text(lang == 'id' ? '(Kosong / Abaikan)' : '(Empty / Ignore)'),
                                     ),
                                     for (int j = 0; j < widget.metadata.columnHeaders.length; j++)
                                       DropdownMenuItem<int?>(
                                         value: j,
-                                        child: Text(widget.metadata.columnHeaders[j], overflow: TextOverflow.ellipsis),
+                                        child: Text(
+                                          AppStrings.formatColumnHeader(widget.metadata.columnHeaders[j], lang),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
                                   ],
                                   onChanged: (val) {
@@ -188,7 +205,7 @@ class _ImportMappingDialogState extends State<ImportMappingDialog> {
                             if (_selectedExcelColumns[i] != null) ...[
                               const SizedBox(height: 6),
                               Text(
-                                _getPreviewText(_selectedExcelColumns[i]!),
+                                _getPreviewText(_selectedExcelColumns[i]!, lang),
                                 style: TextStyle(color: Colors.grey[400], fontSize: 12),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
@@ -208,15 +225,15 @@ class _ImportMappingDialogState extends State<ImportMappingDialog> {
         if (widget.showBackButton)
           TextButton(
             onPressed: () => Navigator.of(context).pop('BACK'),
-            child: const Text('Kembali'),
+            child: Text(AppStrings.back(lang)),
           ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Batal'),
+          child: Text(AppStrings.cancel(lang)),
         ),
         ElevatedButton(
           onPressed: _onProceed,
-          child: const Text('Lanjut'),
+          child: Text(AppStrings.go(lang)),
         ),
       ],
     );

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_providers.dart';
+import '../providers/language_provider.dart';
+import '../utils/app_strings.dart';
 import 'home_screen.dart';
 import 'deck_detail_screen.dart';
 
@@ -9,11 +11,12 @@ class ResultScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageProvider>().currentLanguage;
     final sessionProvider = context.watch<LearningSessionProvider>();
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Learning Results'),
+        title: Text(AppStrings.learningResults(lang)),
         automaticallyImplyLeading: false,
       ),
       body: SingleChildScrollView(
@@ -34,9 +37,9 @@ class ResultScreen extends StatelessWidget {
 
             const SizedBox(height: 24),
 
-            const Text(
-              'Session Complete!',
-              style: TextStyle(
+            Text(
+              AppStrings.sessionComplete(lang),
+              style: const TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.bold,
               ),
@@ -57,25 +60,25 @@ class ResultScreen extends StatelessWidget {
                       children: [
                         _StatItem(
                           icon: Icons.format_list_numbered,
-                          label: 'Total',
+                          label: AppStrings.totalStat(lang),
                           value: sessionProvider.totalCards.toString(),
                           color: Colors.blue,
                         ),
                         _StatItem(
                           icon: Icons.check_circle,
-                          label: 'Known',
+                          label: AppStrings.knownStat(lang),
                           value: sessionProvider.knownCount.toString(),
                           color: Colors.green,
                         ),
                         _StatItem(
                           icon: Icons.cancel,
-                          label: 'Unknown',
+                          label: AppStrings.unknownStat(lang),
                           value: sessionProvider.unknownCount.toString(),
                           color: Colors.red,
                         ),
                         _StatItem(
                           icon: Icons.skip_next,
-                          label: 'Skip',
+                          label: AppStrings.skipStat(lang),
                           value: sessionProvider.skipCount.toString(),
                           color: Colors.orange,
                         ),
@@ -131,7 +134,7 @@ class ResultScreen extends StatelessWidget {
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
-                    child: const Text('Home'),
+                    child: Text(AppStrings.home(lang)),
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -172,7 +175,7 @@ class ResultScreen extends StatelessWidget {
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
-                    child: const Text('Review Again'),
+                    child: Text(AppStrings.reviewAgain(lang)),
                   ),
                 ),
               ],

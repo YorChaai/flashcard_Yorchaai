@@ -236,7 +236,6 @@ class ExcelService {
 
       List<String> rawHeaders = [];
       for (int i = 0; i < headerRow.length; i++) {
-        if (i == scoreColumnIndex) continue;
         rawHeaders.add(headerRow[i]?.toString() ?? 'Column ${rawHeaders.length + 1}');
       }
       
@@ -261,7 +260,6 @@ class ExcelService {
 
         List<String> rawColumns = [];
         for (int j = 0; j < row.length; j++) {
-          if (j == scoreColumnIndex) continue;
           rawColumns.add(row[j]?.toString() ?? '');
         }
 
@@ -421,19 +419,9 @@ except Exception as e:
 
       final headerRow = table.rows[0];
 
-      int scoreColumnIndex = -1;
-      for (int i = 0; i < headerRow.length; i++) {
-        final headerValue = headerRow[i]?.toString().toLowerCase().trim();
-        if (headerValue == 'score' || headerValue == 'skor' || headerValue == 'nilai' || headerValue == '_appmeta_score') {
-          scoreColumnIndex = i;
-          break;
-        }
-      }
-
-      final columnCount = scoreColumnIndex != -1 ? headerRow.length - 1 : headerRow.length;
+      final columnCount = headerRow.length;
       List<String> headers = [];
       for (int i = 0; i < headerRow.length; i++) {
-        if (i == scoreColumnIndex) continue;
         headers.add(headerRow[i]?.toString() ?? 'Column ${headers.length + 1}');
       }
 
@@ -443,7 +431,6 @@ except Exception as e:
         if (row.isNotEmpty) {
           List<String> rowColumns = [];
           for (int j = 0; j < row.length; j++) {
-            if (j == scoreColumnIndex) continue;
             rowColumns.add(row[j]?.toString() ?? '');
           }
           if (rowColumns.isNotEmpty && rowColumns[0].trim().isNotEmpty) {

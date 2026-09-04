@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_providers.dart';
+import '../providers/language_provider.dart';
 import '../providers/theme_provider.dart';
 import '../models/flashcard_card.dart' as flashcard_models;
 import '../services/prompt_service.dart';
+import '../utils/app_strings.dart';
 import 'result_screen.dart';
 
 // Shadow and divider constants
@@ -44,14 +46,15 @@ class _FlashcardScreenState extends State<FlashcardScreen>
   }
 
   void _copyPrompt(BuildContext context, LearningSessionProvider sessionProvider) {
+    final lang = context.read<LanguageProvider>().currentLanguage;
     final deck = context.read<DeckProvider>().selectedDeck;
     final currentCard = sessionProvider.currentCard;
 
     if (currentCard == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Tidak ada kata untuk dibuatkan prompt.'),
-          duration: Duration(seconds: 2),
+        SnackBar(
+          content: Text(AppStrings.noWordForPrompt(lang)),
+          duration: const Duration(seconds: 2),
         ),
       );
       return;
@@ -64,9 +67,9 @@ class _FlashcardScreenState extends State<FlashcardScreen>
 
     Clipboard.setData(ClipboardData(text: prompt));
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Prompt berhasil disalin ke clipboard!'),
-        duration: Duration(seconds: 2),
+      SnackBar(
+        content: Text(AppStrings.promptCopied(lang)),
+        duration: const Duration(seconds: 2),
         backgroundColor: Colors.green,
       ),
     );
@@ -74,12 +77,13 @@ class _FlashcardScreenState extends State<FlashcardScreen>
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageProvider>().currentLanguage;
     final sessionProvider = context.watch<LearningSessionProvider>();
     final currentCard = sessionProvider.currentCard;
 
     if (currentCard == null) {
-      return const Scaffold(
-        body: Center(child: Text('No cards available')),
+      return Scaffold(
+        body: Center(child: Text(AppStrings.noCardsAvailable(lang))),
       );
     }
 
@@ -93,7 +97,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.copy_rounded),
-            tooltip: 'Copy Prompt',
+            tooltip: AppStrings.copyPrompt(lang),
             onPressed: () => _copyPrompt(context, sessionProvider),
           ),
         ],
@@ -200,7 +204,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                       }
                     },
                     icon: const Icon(Icons.close),
-                    label: const Text('Tidak Tahu'),
+                    label: Text(AppStrings.dontKnow(lang)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red,
                       foregroundColor: Colors.white,
@@ -229,7 +233,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                       }
                     },
                     icon: const Icon(Icons.check),
-                    label: const Text('Tahu'),
+                    label: Text(AppStrings.know(lang)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green,
                       foregroundColor: Colors.white,
@@ -256,7 +260,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                           }
                         : null,
                     icon: const Icon(Icons.arrow_back),
-                    label: const Text('Previous'),
+                    label: Text(AppStrings.previous(lang)),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
@@ -284,7 +288,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                       isLastCard ? Icons.done_all : Icons.arrow_forward,
                     ),
                     label: Text(
-                      isLastCard ? 'Finish' : 'Next',
+                      isLastCard ? AppStrings.finish(lang) : AppStrings.next(lang),
                     ),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
@@ -316,6 +320,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     // Read font sizes from global settings only (Settings = source of truth)
     final fontSizeSettings = context.watch<ThemeProvider>().fontSizeSettings;
     final mainFontSize = fontSizeSettings.currentFontSize1;
+    final lang = context.watch<LanguageProvider>().currentLanguage;
 
     return Stack(
       children: [
@@ -334,9 +339,9 @@ class _FlashcardScreenState extends State<FlashcardScreen>
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
-            const Text(
-              'Tap to reveal',
-              style: TextStyle(
+            Text(
+              AppStrings.tapToReveal(lang),
+              style: const TextStyle(
                 fontSize: 14,
                 color: Colors.grey,
               ),
@@ -355,11 +360,12 @@ class _FlashcardScreenState extends State<FlashcardScreen>
   }
 
   Widget _buildScoreAndPracticeAction(flashcard_models.FlashcardCard card) {
+    final lang = context.watch<LanguageProvider>().currentLanguage;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Tooltip(
-          message: 'Latihan Menulis',
+          message: AppStrings.writingPractice(lang),
           child: Material(
             color: Colors.transparent,
             child: InkWell(
@@ -390,7 +396,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
           ),
         ),
         const SizedBox(width: 8),
-        _buildScoreBadge(card.score),
+        _buildScoreBadge(card.score, lang),
       ],
     );
   }
@@ -407,7 +413,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     );
   }
 
-  Widget _buildScoreBadge(int score) {
+  Widget _buildScoreBadge(int score, String lang) {
     final color = score > 0
         ? Colors.green
         : (score < 0 ? Colors.red : Colors.grey);
@@ -420,7 +426,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
         border: Border.all(color: color, width: 1),
       ),
       child: Text(
-        'Skor: $score',
+        AppStrings.scoreLabel(lang, score),
         style: TextStyle(
           color: color,
           fontWeight: FontWeight.bold,
@@ -453,43 +459,53 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     // Read font sizes from global settings only (Settings = source of truth)
     final fontSizeSettings = context.watch<ThemeProvider>().fontSizeSettings;
     final fontSize1 = fontSizeSettings.currentFontSize1;
-    final fontSize23 = fontSizeSettings.currentFontSize23;
-    final fontSize45 = fontSizeSettings.currentFontSize45;
-    final fontSize6 = fontSizeSettings.currentFontSize6;
+    final fontSize2_5 = fontSizeSettings.currentFontSize2_5;
+    final fontSize6_9 = fontSizeSettings.currentFontSize6_9;
+    final fontSize10_12 = fontSizeSettings.currentFontSize10_12;
 
     return Stack(
       children: [
         Center(
           child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Kolom 1 - MAIN WORD (dynamic font size)
-            Text(
-              card.columns.isNotEmpty ? card.columns[0] : '',
-              style: TextStyle(
-                fontSize: fontSize1,
-                fontWeight: FontWeight.bold,
+            padding: const EdgeInsets.all(24.0),
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Kolom 1 - MAIN WORD (dynamic font size)
+                  Text(
+                    card.columns.isNotEmpty ? card.columns[0] : '',
+                    style: TextStyle(
+                      fontSize: fontSize1,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+
+                  // Extra columns (Kolom 2-12) dengan divider
+                  if (extraCols.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      height: 1,
+                      color: dividerColor,
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Layout berdasarkan jumlah extra columns (hingga 12 kolom)
+                    _buildExtraColumnsLayout(
+                      extraCols,
+                      columnCount,
+                      fontSize2_5,
+                      fontSize6_9,
+                      fontSize10_12,
+                      dividerColor,
+                    ),
+                  ],
+                ],
               ),
-              textAlign: TextAlign.center,
             ),
-
-            // Extra columns (Kolom 2-6) dengan divider
-            if (extraCols.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Container(
-                height: 1,
-                color: dividerColor,
-              ),
-              const SizedBox(height: 12),
-
-              // Layout berdasarkan jumlah extra columns
-              _buildExtraColumnsLayout(extraCols, columnCount, fontSize23, fontSize45, fontSize6),
-            ],
-          ],
-        ),
-      ),
+          ),
         ),
         Positioned(
           top: 16,
@@ -500,19 +516,29 @@ class _FlashcardScreenState extends State<FlashcardScreen>
     );
   }
 
-  Widget _buildExtraColumnsLayout(List<String> extraCols, int columnCount, double fontSize23, double fontSize45, double fontSize6) {
+  Widget _buildExtraColumnsLayout(
+    List<String> extraCols,
+    int columnCount,
+    double fontSize2_5,
+    double fontSize6_9,
+    double fontSize10_12,
+    Color dividerColor,
+  ) {
     if (extraCols.isEmpty) return const SizedBox.shrink();
 
     List<Widget> rows = [];
     for (int i = 0; i < extraCols.length; i += 2) {
-      // Tentukan ukuran font berdasarkan baris
+      // Tentukan ukuran font berdasarkan baris (4 mode: 1, 2-5, 6-9, 10-12)
       double currentFontSize;
-      if (i == 0) {
-        currentFontSize = fontSize23;
-      } else if (i == 2) {
-        currentFontSize = fontSize45;
+      if (i <= 2) {
+        // Kolom 2-3 (i=0) & Kolom 4-5 (i=2)
+        currentFontSize = fontSize2_5;
+      } else if (i <= 6) {
+        // Kolom 6-7 (i=4) & Kolom 8-9 (i=6)
+        currentFontSize = fontSize6_9;
       } else {
-        currentFontSize = fontSize6;
+        // Kolom 10-11 (i=8) & Kolom 12 (i=10)
+        currentFontSize = fontSize10_12;
       }
 
       // Tambahkan divider jika ini bukan baris pertama
@@ -520,7 +546,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
         rows.add(const SizedBox(height: 8));
         rows.add(Container(
           height: 1,
-          color: Colors.black.withValues(alpha: 0.5),
+          color: dividerColor,
         ));
         rows.add(const SizedBox(height: 8));
       }
@@ -603,6 +629,8 @@ class _WritingPracticeDialogState extends State<_WritingPracticeDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageProvider>().currentLanguage;
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
@@ -626,10 +654,10 @@ class _WritingPracticeDialogState extends State<_WritingPracticeDialog> {
                           size: 24,
                         ),
                         const SizedBox(width: 8),
-                        const Flexible(
+                        Flexible(
                           child: Text(
-                            'Latihan Menulis',
-                            style: TextStyle(
+                            AppStrings.writingPractice(lang),
+                            style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
                             ),
@@ -644,7 +672,7 @@ class _WritingPracticeDialogState extends State<_WritingPracticeDialog> {
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                     onPressed: () => Navigator.pop(context),
-                    tooltip: 'Tutup',
+                    tooltip: AppStrings.close(lang),
                   ),
                 ],
               ),
@@ -665,7 +693,7 @@ class _WritingPracticeDialogState extends State<_WritingPracticeDialog> {
                 child: Column(
                   children: [
                     Text(
-                      'Kata yang harus ditulis:',
+                      AppStrings.wordToWritePrompt(lang),
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.grey[600],
@@ -690,8 +718,8 @@ class _WritingPracticeDialogState extends State<_WritingPracticeDialog> {
                 controller: _controller,
                 autofocus: true,
                 decoration: InputDecoration(
-                  labelText: 'Ketik kata di sini...',
-                  hintText: 'Tuliskan jawaban...',
+                  labelText: AppStrings.typeWordHere(lang),
+                  hintText: AppStrings.writeAnswerHere(lang),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -734,7 +762,7 @@ class _WritingPracticeDialogState extends State<_WritingPracticeDialog> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          _isCorrect! ? 'Benar' : 'Salah, coba lagi',
+                          _isCorrect! ? AppStrings.correct(lang) : AppStrings.incorrectTryAgain(lang),
                           style: TextStyle(
                             color: _isCorrect! ? Colors.green[800] : Colors.red[800],
                             fontWeight: FontWeight.bold,
@@ -760,7 +788,7 @@ class _WritingPracticeDialogState extends State<_WritingPracticeDialog> {
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                      child: const Text('Tutup'),
+                      child: Text(AppStrings.close(lang)),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -773,7 +801,7 @@ class _WritingPracticeDialogState extends State<_WritingPracticeDialog> {
                           borderRadius: BorderRadius.circular(10),
                         ),
                       ),
-                      child: const Text('Cek Jawaban'),
+                      child: Text(AppStrings.checkAnswer(lang)),
                     ),
                   ),
                 ],

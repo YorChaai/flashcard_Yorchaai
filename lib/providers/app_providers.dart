@@ -595,7 +595,6 @@ class DeckProvider extends ChangeNotifier {
       final deckIdx = _decks.indexWhere((d) => d.id == config.deckId);
       if (deckIdx != -1) {
         _decks[deckIdx] = updatedDeck;
-        await _storageService.saveDecks(_decks);
       }
     }
 
@@ -696,12 +695,49 @@ class DeckProvider extends ChangeNotifier {
       }
 
       if (colIdx == 0) {
-        // Sort by original row position
-        result.sort((a, b) {
-          final noA = cardOriginalNumbers[a.id] ?? 0;
-          final noB = cardOriginalNumbers[b.id] ?? 0;
-          return asc ? noA.compareTo(noB) : noB.compareTo(noA);
-        });
+        // Sort by original row position, keeping Type Priority active if configured
+        int? typeColIdx;
+        for (int i = 0; i < deck.columnHeaders.length; i++) {
+          final h = deck.columnHeaders[i].trim().toLowerCase();
+          if (h == 'type' || h == 'tipe') {
+            typeColIdx = i;
+            break;
+          }
+        }
+
+        if (typeColIdx != null && config.typeSortPriority.isNotEmpty) {
+          final priorityMap = <String, int>{};
+          for (int i = 0; i < config.typeSortPriority.length; i++) {
+            priorityMap[config.typeSortPriority[i].toUpperCase().trim()] = i;
+          }
+
+          int getTopPriority(FlashcardCard card) {
+            final raw = typeColIdx! < card.columns.length ? card.columns[typeColIdx] : '';
+            if (raw.isEmpty) return 999999;
+            final tokens = raw.split(RegExp(r'[,/]'));
+            int minP = 999999;
+            for (final t in tokens) {
+              final clean = t.replaceAll(RegExp(r'\(.*?\)'), '').trim().toUpperCase();
+              final p = priorityMap[clean] ?? (priorityMap[t.trim().toUpperCase()] ?? 999999);
+              if (p < minP) minP = p;
+            }
+            return minP;
+          }
+
+          result.sort((a, b) {
+            final pA = getTopPriority(a);
+            final pB = getTopPriority(b);
+            final comp = pA.compareTo(pB);
+            if (comp != 0) return comp;
+            return secondaryComparison(a, b);
+          });
+        } else {
+          result.sort((a, b) {
+            final noA = cardOriginalNumbers[a.id] ?? 0;
+            final noB = cardOriginalNumbers[b.id] ?? 0;
+            return asc ? noA.compareTo(noB) : noB.compareTo(noA);
+          });
+        }
       } else if (colIdx == deck.columnHeaders.length + 1) {
         // Sort by Score (numeric)
         result.sort((a, b) {
@@ -717,31 +753,27 @@ class DeckProvider extends ChangeNotifier {
           final headerName = deck.columnHeaders[headerIdx].trim().toLowerCase();
 
           if ((headerName == 'type' || headerName == 'tipe') && config.typeSortPriority.isNotEmpty) {
-            result.sort((a, b) {
-              final rawA = headerIdx < a.columns.length ? a.columns[headerIdx] : '';
-              final rawB = headerIdx < b.columns.length ? b.columns[headerIdx] : '';
-              final tokensA = rawA
-                  .split(RegExp(r'[,/]'))
-                  .map((e) => e.replaceAll(RegExp(r'\(.*?\)'), '').trim().toUpperCase())
-                  .where((e) => e.isNotEmpty)
-                  .toList();
-              final tokensB = rawB
-                  .split(RegExp(r'[,/]'))
-                  .map((e) => e.replaceAll(RegExp(r'\(.*?\)'), '').trim().toUpperCase())
-                  .where((e) => e.isNotEmpty)
-                  .toList();
+            final priorityMap = <String, int>{};
+            for (int i = 0; i < config.typeSortPriority.length; i++) {
+              priorityMap[config.typeSortPriority[i].toUpperCase().trim()] = i;
+            }
 
-              int getPriority(List<String> tokens) {
-                int minP = 999;
-                for (final t in tokens) {
-                  final idx = config.typeSortPriority.indexOf(t);
-                  if (idx != -1 && idx < minP) minP = idx;
-                }
-                return minP;
+            int getTopPriority(FlashcardCard card) {
+              final raw = headerIdx < card.columns.length ? card.columns[headerIdx] : '';
+              if (raw.isEmpty) return 999999;
+              final tokens = raw.split(RegExp(r'[,/]'));
+              int minP = 999999;
+              for (final t in tokens) {
+                final clean = t.replaceAll(RegExp(r'\(.*?\)'), '').trim().toUpperCase();
+                final p = priorityMap[clean] ?? (priorityMap[t.trim().toUpperCase()] ?? 999999);
+                if (p < minP) minP = p;
               }
+              return minP;
+            }
 
-              final pA = getPriority(tokensA);
-              final pB = getPriority(tokensB);
+            result.sort((a, b) {
+              final pA = getTopPriority(a);
+              final pB = getTopPriority(b);
               final comp = pA.compareTo(pB);
               if (comp != 0) {
                 return asc ? comp : -comp;

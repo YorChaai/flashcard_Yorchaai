@@ -1,13 +1,16 @@
+import 'dart:math' show max;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_providers.dart';
+import '../providers/language_provider.dart';
 import '../providers/theme_provider.dart';
 import '../models/order_mode.dart';
 import '../models/deck.dart';
 import '../models/font_size_settings.dart';
 import '../models/flashcard_card.dart';
 import '../services/storage_service.dart';
+import '../utils/app_strings.dart';
 import '../utils/deck_column_helper.dart';
 import 'flashcard_screen.dart';
 import 'learning_preview_screen.dart';
@@ -60,10 +63,12 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final langProv = context.watch<LanguageProvider>();
+    final lang = langProv.currentLanguage;
     final deck = context.watch<DeckProvider>().selectedDeck;
 
     if (deck == null) {
-      return const Scaffold(body: Center(child: Text('No deck selected')));
+      return Scaffold(body: Center(child: Text(AppStrings.noDeckSelected(lang))));
     }
 
     // Fix for when starting from 0 cards
@@ -85,7 +90,7 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
       floatingActionButton: deck.id == 'custom_mode_deck_default'
           ? FloatingActionButton(
               onPressed: () => _showAddCardDialog(context, deck),
-              tooltip: 'Add Custom Card',
+              tooltip: AppStrings.addCustomCard(lang),
               child: const Icon(Icons.add),
             )
           : null,
@@ -115,7 +120,7 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            const Text('Total Cards'),
+                            Text(AppStrings.totalCards(lang)),
                           ],
                         ),
                         Column(
@@ -129,7 +134,7 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            const Text('Columns'),
+                            Text(AppStrings.columns(lang)),
                           ],
                         ),
                       ],
@@ -141,15 +146,15 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                     // Column Headers section with edit button
                     Row(
                       children: [
-                        const Text(
-                          'Column Headers:',
-                          style: TextStyle(fontWeight: FontWeight.bold),
+                        Text(
+                          AppStrings.columnHeaders(lang),
+                          style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         const Spacer(),
                         IconButton(
                           icon: const Icon(Icons.edit, size: 20),
                           onPressed: () => _showColumnEditDialog(context, deck),
-                          tooltip: 'Edit Column Settings',
+                          tooltip: AppStrings.editColumnSettings(lang),
                         ),
                       ],
                     ),
@@ -174,9 +179,9 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
             const SizedBox(height: 24),
 
             // Active Dataset Selector
-            const Text(
-              'Active Dataset',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Text(
+              AppStrings.activeDataset(lang),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
             Card(
@@ -200,7 +205,7 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                       return DropdownMenuItem(
                         value: d,
                         child: Text(
-                          '${d.name} (${d.totalCards} cards)',
+                          '${d.name} (${AppStrings.cardsCount(lang, d.totalCards)})',
                           softWrap: true,
                           style: const TextStyle(fontWeight: FontWeight.w600),
                         ),
@@ -234,9 +239,9 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
 
             const SizedBox(height: 24),
 
-            const Text(
-              'Learning Range',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Text(
+              AppStrings.learningRange(lang),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
 
@@ -253,7 +258,7 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                       runSpacing: 8,
                       children: [
                         Text(
-                          'Available data: 1 - ${deck.totalCards}',
+                          AppStrings.availableData(lang, deck.totalCards),
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.grey[600],
@@ -262,7 +267,7 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                         TextButton.icon(
                           onPressed: () => _previewLearning(deck),
                           icon: const Icon(Icons.preview, size: 20),
-                          label: const Text('Library Preview'),
+                          label: Text(AppStrings.libraryPreview(lang)),
                           style: TextButton.styleFrom(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 12,
@@ -284,10 +289,10 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                             inputFormatters: [
                               FilteringTextInputFormatter.digitsOnly,
                             ],
-                            decoration: const InputDecoration(
-                              labelText: 'From',
+                            decoration: InputDecoration(
+                              labelText: AppStrings.from(lang),
                               hintText: '1',
-                              border: OutlineInputBorder(),
+                              border: const OutlineInputBorder(),
                             ),
                           ),
                         ),
@@ -300,7 +305,7 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                               FilteringTextInputFormatter.digitsOnly,
                             ],
                             decoration: InputDecoration(
-                              labelText: 'To',
+                              labelText: AppStrings.to(lang),
                               hintText: deck.totalCards.toString(),
                               border: const OutlineInputBorder(),
                             ),
@@ -315,9 +320,9 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
 
             const SizedBox(height: 24),
 
-            const Text(
-              'Order Mode',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            Text(
+              AppStrings.orderMode(lang),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
 
@@ -341,8 +346,8 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                           }
                         },
                       ),
-                      title: const Text('Normal'),
-                      subtitle: const Text('Original order (as in Excel)'),
+                      title: Text(AppStrings.orderNormal(lang)),
+                      subtitle: Text(AppStrings.orderNormalDesc(lang)),
                       onTap: () {
                         setState(() {
                           _selectedMode = OrderMode.normal;
@@ -364,8 +369,8 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                           }
                         },
                       ),
-                      title: const Text('Reverse'),
-                      subtitle: const Text('Reversed order'),
+                      title: Text(AppStrings.orderReverse(lang)),
+                      subtitle: Text(AppStrings.orderReverseDesc(lang)),
                       onTap: () {
                         setState(() {
                           _selectedMode = OrderMode.reverse;
@@ -387,8 +392,8 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                           }
                         },
                       ),
-                      title: const Text('Random'),
-                      subtitle: const Text('Shuffled order'),
+                      title: Text(AppStrings.orderRandom(lang)),
+                      subtitle: Text(AppStrings.orderRandomDesc(lang)),
                       onTap: () {
                         setState(() {
                           _selectedMode = OrderMode.random;
@@ -409,9 +414,9 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                 backgroundColor: Theme.of(context).primaryColor,
                 foregroundColor: Colors.white,
               ),
-              child: const Text(
-                'Start Learning',
-                style: TextStyle(fontSize: 18),
+              child: Text(
+                AppStrings.startLearningButton(lang),
+                style: const TextStyle(fontSize: 18),
               ),
             ),
           ],
@@ -533,9 +538,13 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
   }
 
   void _showColumnEditDialog(BuildContext context, Deck deck) {
-    final columnOrder = List<int>.generate(deck.columnCount, (i) => i);
-    final columnHeaders = List<String>.from(deck.columnHeaders);
-    int visibleColumnCount = deck.visibleColumnCount.clamp(1, deck.columnCount);
+    final totalSlots = max(12, deck.columnCount);
+    final columnHeaders = List<String>.generate(totalSlots, (i) {
+      if (i < deck.columnHeaders.length) return deck.columnHeaders[i];
+      return 'Kolom ${i + 1}';
+    });
+    final columnOrder = List<int>.generate(totalSlots, (i) => i);
+    int visibleColumnCount = deck.visibleColumnCount.clamp(1, totalSlots);
 
     final themeProvider = context.read<ThemeProvider>();
     final fontSizeSettings = themeProvider.fontSizeSettings;
@@ -556,22 +565,24 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
     final fontSize1Controller = TextEditingController(
       text: formatFontSize(fontSizeSettings.currentFontSize1),
     );
-    final fontSize23Controller = TextEditingController(
-      text: formatFontSize(fontSizeSettings.currentFontSize23),
+    final fontSize2_5Controller = TextEditingController(
+      text: formatFontSize(fontSizeSettings.currentFontSize2_5),
     );
-    final fontSize45Controller = TextEditingController(
-      text: formatFontSize(fontSizeSettings.currentFontSize45),
+    final fontSize6_9Controller = TextEditingController(
+      text: formatFontSize(fontSizeSettings.currentFontSize6_9),
     );
-    final fontSize6Controller = TextEditingController(
-      text: formatFontSize(fontSizeSettings.currentFontSize6),
+    final fontSize10_12Controller = TextEditingController(
+      text: formatFontSize(fontSizeSettings.currentFontSize10_12),
     );
+
+    final lang = context.read<LanguageProvider>().currentLanguage;
 
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) {
           return AlertDialog(
-            title: const Text('Column Settings'),
+            title: Text(AppStrings.columnSettings(lang)),
             content: SizedBox(
               width: MediaQuery.of(context).size.width.clamp(280.0, 440.0),
               child: SingleChildScrollView(
@@ -585,97 +596,89 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        const Text(
-                          'Column Order',
-                          style: TextStyle(
+                        Text(
+                          AppStrings.columnOrder(lang),
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color:
-                                Theme.of(context).brightness == Brightness.dark
-                                ? Colors.grey[800]
-                                : Colors.grey[200],
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color:
-                                  Theme.of(context).brightness ==
-                                      Brightness.dark
-                                  ? Colors.grey[700]!
-                                  : Colors.grey[300]!,
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'Show: ',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color:
-                                      Theme.of(context).brightness ==
-                                          Brightness.dark
-                                      ? Colors.white70
-                                      : Colors.black87,
+                        PopupMenuButton<int>(
+                          tooltip: AppStrings.showCount(lang),
+                          offset: const Offset(0, 38),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          onSelected: (val) {
+                            setDialogState(() {
+                              visibleColumnCount = val;
+                            });
+                          },
+                          itemBuilder: (context) => [
+                            for (final val in List.generate(12, (i) => i + 1))
+                              PopupMenuItem<int>(
+                                value: val,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      '$val ${lang == 'id' ? 'Kolom' : 'Columns'}',
+                                      style: TextStyle(
+                                        fontWeight: visibleColumnCount == val ? FontWeight.bold : FontWeight.normal,
+                                        color: visibleColumnCount == val ? Colors.green.shade700 : null,
+                                      ),
+                                    ),
+                                    if (visibleColumnCount == val)
+                                      Icon(Icons.check, size: 18, color: Colors.green.shade700),
+                                  ],
                                 ),
                               ),
-                              DropdownButtonHideUnderline(
-                                child: DropdownButton<int>(
-                                  dropdownColor:
-                                      Theme.of(context).brightness ==
-                                          Brightness.dark
-                                      ? Colors.grey[800]
-                                      : Colors.white,
-                                  value: visibleColumnCount,
-                                  isDense: true,
-                                  iconSize: 18,
-                                  iconEnabledColor:
-                                      Theme.of(context).brightness ==
-                                          Brightness.dark
-                                      ? Colors.white
-                                      : Colors.black,
+                          ],
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).brightness == Brightness.dark
+                                  ? Colors.grey[800]
+                                  : Colors.grey[200],
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: Theme.of(context).brightness == Brightness.dark
+                                    ? Colors.grey[700]!
+                                    : Colors.grey[300]!,
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  AppStrings.showCount(lang),
                                   style: TextStyle(
+                                    fontSize: 12,
+                                    color: Theme.of(context).brightness == Brightness.dark
+                                        ? Colors.white70
+                                        : Colors.black87,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '$visibleColumnCount',
+                                  style: const TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,
-                                    color:
-                                        Theme.of(context).brightness ==
-                                            Brightness.dark
-                                        ? Colors.white
-                                        : Colors.black,
                                   ),
-                                  items:
-                                      List.generate(
-                                        deck.columnCount,
-                                        (i) => i + 1,
-                                      ).map((val) {
-                                        return DropdownMenuItem(
-                                          value: val,
-                                          child: Text('$val'),
-                                        );
-                                      }).toList(),
-                                  onChanged: (val) {
-                                    if (val != null) {
-                                      setDialogState(() {
-                                        visibleColumnCount = val;
-                                      });
-                                    }
-                                  },
                                 ),
-                              ),
-                            ],
+                                const SizedBox(width: 2),
+                                const Icon(Icons.arrow_drop_down, size: 18),
+                              ],
+                            ),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 8),
                     Container(
-                      height: (columnOrder.length * 52.0).clamp(160.0, 280.0),
+                      height: (columnOrder.length * 52.0).clamp(180.0, 320.0),
                       decoration: BoxDecoration(
                         border: Border.all(
                           color: Theme.of(context).brightness == Brightness.dark
@@ -686,9 +689,14 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                         color: Theme.of(context).cardColor,
                       ),
                       child: ReorderableListView.builder(
+                        buildDefaultDragHandles: false,
+                        physics: const ClampingScrollPhysics(),
                         itemCount: columnOrder.length,
                         onReorderItem: (oldIndex, newIndex) {
                           setDialogState(() {
+                            if (oldIndex < newIndex) {
+                              newIndex -= 1;
+                            }
                             final itemOrder = columnOrder.removeAt(oldIndex);
                             columnOrder.insert(newIndex, itemOrder);
 
@@ -698,41 +706,111 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                         },
                         itemBuilder: (context, idx) {
                           final headerName = columnHeaders[idx];
+                          final isActive = idx < visibleColumnCount;
+                          final isFirst = idx == 0;
+                          final isLast = idx == columnOrder.length - 1;
+
                           return ListTile(
-                            key: ValueKey('column_order_${columnOrder[idx]}'),
+                            key: ValueKey('column_order_${columnOrder[idx]}_$idx'),
                             dense: true,
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 2,
+                            contentPadding: const EdgeInsets.only(
+                              left: 10,
+                              right: 4,
                             ),
-                            leading: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 3,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.blue.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                '#${idx + 1}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                  color: Colors.blueAccent,
+                            leading: InkWell(
+                              borderRadius: BorderRadius.circular(6),
+                              onTap: () {
+                                setDialogState(() {
+                                  visibleColumnCount = isActive ? idx : (idx + 1);
+                                });
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isActive
+                                      ? Colors.green.withValues(alpha: 0.18)
+                                      : Colors.white,
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: isActive ? Colors.green.shade600 : Colors.black87,
+                                    width: 1.2,
+                                  ),
+                                ),
+                                child: Text(
+                                  '#${idx + 1}',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                    color: isActive ? Colors.green.shade800 : Colors.black87,
+                                  ),
                                 ),
                               ),
                             ),
                             title: Text(
-                              headerName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
+                              AppStrings.formatColumnHeader(headerName, lang),
+                              style: TextStyle(
+                                fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
                                 fontSize: 14,
+                                color: isActive ? null : Colors.grey[600],
                               ),
                             ),
-                            trailing: const Icon(
-                              Icons.drag_handle,
-                              color: Colors.grey,
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.arrow_upward, size: 18),
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                                  color: isFirst ? Colors.grey.withValues(alpha: 0.25) : Colors.blueAccent,
+                                  tooltip: 'Move Up',
+                                  onPressed: isFirst
+                                      ? null
+                                      : () {
+                                          setDialogState(() {
+                                            final itemOrder = columnOrder.removeAt(idx);
+                                            columnOrder.insert(idx - 1, itemOrder);
+                                            final itemHeader = columnHeaders.removeAt(idx);
+                                            columnHeaders.insert(idx - 1, itemHeader);
+                                          });
+                                        },
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.arrow_downward, size: 18),
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                                  color: isLast ? Colors.grey.withValues(alpha: 0.25) : Colors.blueAccent,
+                                  tooltip: 'Move Down',
+                                  onPressed: isLast
+                                      ? null
+                                      : () {
+                                          setDialogState(() {
+                                            final itemOrder = columnOrder.removeAt(idx);
+                                            columnOrder.insert(idx + 1, itemOrder);
+                                            final itemHeader = columnHeaders.removeAt(idx);
+                                            columnHeaders.insert(idx + 1, itemHeader);
+                                          });
+                                        },
+                                ),
+                                const SizedBox(width: 2),
+                                ReorderableDragStartListener(
+                                  index: idx,
+                                  child: const MouseRegion(
+                                    cursor: SystemMouseCursors.grab,
+                                    child: Padding(
+                                      padding: EdgeInsets.symmetric(horizontal: 10.0, vertical: 8.0),
+                                      child: Icon(
+                                        Icons.drag_handle,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           );
                         },
@@ -746,9 +824,9 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        const Text(
-                          'Font Size Settings',
-                          style: TextStyle(
+                        Text(
+                          AppStrings.fontSizeSettingsTitle(lang),
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                           ),
@@ -797,10 +875,10 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                                 RegExp(r'^\d*\.?\d*'),
                               ),
                             ],
-                            decoration: const InputDecoration(
-                              labelText: 'Kolom 1 (Atas Tengah)',
-                              border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(
+                            decoration: InputDecoration(
+                              labelText: AppStrings.col1(lang),
+                              border: const OutlineInputBorder(),
+                              contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 12,
                                 vertical: 8,
                               ),
@@ -808,7 +886,7 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                           ),
                           const SizedBox(height: 12),
                           TextField(
-                            controller: fontSize23Controller,
+                            controller: fontSize2_5Controller,
                             keyboardType: const TextInputType.numberWithOptions(
                               decimal: true,
                             ),
@@ -817,10 +895,10 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                                 RegExp(r'^\d*\.?\d*'),
                               ),
                             ],
-                            decoration: const InputDecoration(
-                              labelText: 'Kolom 2 & 3',
-                              border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(
+                            decoration: InputDecoration(
+                              labelText: AppStrings.col2_5(lang),
+                              border: const OutlineInputBorder(),
+                              contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 12,
                                 vertical: 8,
                               ),
@@ -828,7 +906,7 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                           ),
                           const SizedBox(height: 12),
                           TextField(
-                            controller: fontSize45Controller,
+                            controller: fontSize6_9Controller,
                             keyboardType: const TextInputType.numberWithOptions(
                               decimal: true,
                             ),
@@ -837,10 +915,10 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                                 RegExp(r'^\d*\.?\d*'),
                               ),
                             ],
-                            decoration: const InputDecoration(
-                              labelText: 'Kolom 4 & 5',
-                              border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(
+                            decoration: InputDecoration(
+                              labelText: AppStrings.col6_9(lang),
+                              border: const OutlineInputBorder(),
+                              contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 12,
                                 vertical: 8,
                               ),
@@ -848,7 +926,7 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                           ),
                           const SizedBox(height: 12),
                           TextField(
-                            controller: fontSize6Controller,
+                            controller: fontSize10_12Controller,
                             keyboardType: const TextInputType.numberWithOptions(
                               decimal: true,
                             ),
@@ -857,10 +935,10 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                                 RegExp(r'^\d*\.?\d*'),
                               ),
                             ],
-                            decoration: const InputDecoration(
-                              labelText: 'Kolom 6 (Bawah)',
-                              border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(
+                            decoration: InputDecoration(
+                              labelText: AppStrings.col10_12(lang),
+                              border: const OutlineInputBorder(),
+                              contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 12,
                                 vertical: 8,
                               ),
@@ -878,7 +956,7 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                 onPressed: () {
                   Navigator.pop(context);
                 },
-                child: const Text('Cancel'),
+                child: Text(AppStrings.cancel(lang)),
               ),
               ElevatedButton(
                 onPressed: () async {
@@ -886,24 +964,24 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                   final double? newSize1 = parseFontSize(
                     fontSize1Controller.text,
                   );
-                  final double? newSize23 = parseFontSize(
-                    fontSize23Controller.text,
+                  final double? newSize2_5 = parseFontSize(
+                    fontSize2_5Controller.text,
                   );
-                  final double? newSize45 = parseFontSize(
-                    fontSize45Controller.text,
+                  final double? newSize6_9 = parseFontSize(
+                    fontSize6_9Controller.text,
                   );
-                  final double? newSize6 = parseFontSize(
-                    fontSize6Controller.text,
+                  final double? newSize10_12 = parseFontSize(
+                    fontSize10_12Controller.text,
                   );
 
                   // Validate font sizes
                   if ((newSize1 != null && newSize1 <= 0) ||
-                      (newSize23 != null && newSize23 <= 0) ||
-                      (newSize45 != null && newSize45 <= 0) ||
-                      (newSize6 != null && newSize6 <= 0)) {
+                      (newSize2_5 != null && newSize2_5 <= 0) ||
+                      (newSize6_9 != null && newSize6_9 <= 0) ||
+                      (newSize10_12 != null && newSize10_12 <= 0)) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Font size harus lebih dari 0'),
+                      SnackBar(
+                        content: Text(AppStrings.fontSizeError(lang)),
                         backgroundColor: Colors.red,
                       ),
                     );
@@ -921,48 +999,63 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                     updatedSettings = currentSettings.copyWith(
                       mobileFontSize1:
                           newSize1 ?? currentSettings.mobileFontSize1,
-                      mobileFontSize23:
-                          newSize23 ?? currentSettings.mobileFontSize23,
-                      mobileFontSize45:
-                          newSize45 ?? currentSettings.mobileFontSize45,
-                      mobileFontSize6:
-                          newSize6 ?? currentSettings.mobileFontSize6,
+                      mobileFontSize2_5:
+                          newSize2_5 ?? currentSettings.mobileFontSize2_5,
+                      mobileFontSize6_9:
+                          newSize6_9 ?? currentSettings.mobileFontSize6_9,
+                      mobileFontSize10_12:
+                          newSize10_12 ?? currentSettings.mobileFontSize10_12,
                     );
                   } else {
                     updatedSettings = currentSettings.copyWith(
                       pcFontSize1: newSize1 ?? currentSettings.pcFontSize1,
-                      pcFontSize23: newSize23 ?? currentSettings.pcFontSize23,
-                      pcFontSize45: newSize45 ?? currentSettings.pcFontSize45,
-                      pcFontSize6: newSize6 ?? currentSettings.pcFontSize6,
+                      pcFontSize2_5:
+                          newSize2_5 ?? currentSettings.pcFontSize2_5,
+                      pcFontSize6_9:
+                          newSize6_9 ?? currentSettings.pcFontSize6_9,
+                      pcFontSize10_12:
+                          newSize10_12 ?? currentSettings.pcFontSize10_12,
                     );
                   }
 
                   await themeProvider.updateFontSizeSettings(updatedSettings);
 
-                  // Apply column reorder to deck (deck only handles column order, not font sizes)
-                  var updatedDeck = deck;
+                  // Save deck with updated column count, headers, cards and visible count
+                  final newColumnCount = max(deck.columnCount, visibleColumnCount);
 
-                  // Apply swaps to transform current order to target order
-                  for (int i = 0; i < columnOrder.length; i++) {
-                    if (columnOrder[i] != i) {
-                      // Find where column i currently is
-                      final findIndex = columnOrder.indexWhere(
-                        (idx) => idx == i,
-                      );
-                      if (findIndex != -1 && findIndex != i) {
-                        // Swap in columnOrder array
-                        final temp = columnOrder[i];
-                        columnOrder[i] = columnOrder[findIndex];
-                        columnOrder[findIndex] = temp;
-                        // Apply reorder to deck
-                        updatedDeck = updatedDeck.reorderColumn(findIndex, i);
-                      }
+                  final newCards = deck.cards.map((card) {
+                    final reordered = columnOrder.map((oldIdx) {
+                      if (oldIdx < card.columns.length) return card.columns[oldIdx];
+                      return '';
+                    }).toList();
+                    while (reordered.length < newColumnCount) {
+                      reordered.add('');
                     }
+                    return card.copyWith(columns: reordered);
+                  }).toList();
+
+                  final newDeletedCards = deck.deletedCards.map((card) {
+                    final reordered = columnOrder.map((oldIdx) {
+                      if (oldIdx < card.columns.length) return card.columns[oldIdx];
+                      return '';
+                    }).toList();
+                    while (reordered.length < newColumnCount) {
+                      reordered.add('');
+                    }
+                    return card.copyWith(columns: reordered);
+                  }).toList();
+
+                  final newHeaders = List<String>.from(columnHeaders);
+                  while (newHeaders.length < newColumnCount) {
+                    newHeaders.add('Kolom ${newHeaders.length + 1}');
                   }
 
-                  // Save deck (column order and visible count changes)
-                  updatedDeck = updatedDeck.copyWith(
+                  final updatedDeck = deck.copyWith(
+                    columnCount: newColumnCount,
                     visibleColumnCount: visibleColumnCount,
+                    columnHeaders: newHeaders.sublist(0, newColumnCount),
+                    cards: newCards,
+                    deletedCards: newDeletedCards,
                   );
                   await deckProvider.updateDeck(updatedDeck);
 
@@ -970,14 +1063,14 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                   if (context.mounted) {
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Settings saved'),
+                      SnackBar(
+                        content: Text(AppStrings.fontSizeSaved(lang)),
                         backgroundColor: Colors.green,
                       ),
                     );
                   }
                 },
-                child: const Text('Save'),
+                child: Text(AppStrings.save(lang)),
               ),
             ],
           );
@@ -986,9 +1079,9 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
     ).then((_) {
       Future.delayed(const Duration(milliseconds: 400), () {
         fontSize1Controller.dispose();
-        fontSize23Controller.dispose();
-        fontSize45Controller.dispose();
-        fontSize6Controller.dispose();
+        fontSize2_5Controller.dispose();
+        fontSize6_9Controller.dispose();
+        fontSize10_12Controller.dispose();
       });
     });
   }
@@ -1082,6 +1175,8 @@ class _AddCustomCardDialogState extends State<_AddCustomCardDialog> {
       }
     });
 
+    final lang = context.read<LanguageProvider>().currentLanguage;
+
     if (hasValidationError) return;
 
     final validRows = _rows
@@ -1090,8 +1185,8 @@ class _AddCustomCardDialogState extends State<_AddCustomCardDialog> {
 
     if (validRows.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Silakan isi minimal 1 kata.'),
+        SnackBar(
+          content: Text(lang == 'id' ? 'Silakan isi minimal 1 kata.' : 'Please enter at least 1 word.'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -1171,9 +1266,13 @@ class _AddCustomCardDialogState extends State<_AddCustomCardDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              count == 1
-                  ? 'Kata "${validRows.first.kataController.text.trim()}" berhasil ditambahkan!'
-                  : '$count kata berhasil ditambahkan!',
+              lang == 'id'
+                  ? (count == 1
+                      ? 'Kata "${validRows.first.kataController.text.trim()}" berhasil ditambahkan!'
+                      : '$count kata berhasil ditambahkan!')
+                  : (count == 1
+                      ? 'Word "${validRows.first.kataController.text.trim()}" added successfully!'
+                      : '$count words added successfully!'),
             ),
           ),
         );
@@ -1189,8 +1288,10 @@ class _AddCustomCardDialogState extends State<_AddCustomCardDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageProvider>().currentLanguage;
+
     return AlertDialog(
-      title: const Text('Tambah Kata Baru'),
+      title: Text(AppStrings.addNewWords(lang)),
       content: SizedBox(
         width: double.maxFinite,
         child: SingleChildScrollView(
@@ -1205,7 +1306,7 @@ class _AddCustomCardDialogState extends State<_AddCustomCardDialog> {
                   children: [
                     Expanded(
                       child: Text(
-                        'Kata',
+                        AppStrings.formatColumnHeader('Kata', lang),
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -1216,7 +1317,7 @@ class _AddCustomCardDialogState extends State<_AddCustomCardDialog> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Arti',
+                        AppStrings.formatColumnHeader('Arti', lang),
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -1245,7 +1346,7 @@ class _AddCustomCardDialogState extends State<_AddCustomCardDialog> {
                           controller: rowItem.kataController,
                           autofocus: i == 0,
                           decoration: InputDecoration(
-                            hintText: 'Kata ${i + 1}',
+                            hintText: '${AppStrings.formatColumnHeader('Kata', lang)} ${i + 1}',
                             border: const OutlineInputBorder(),
                             isDense: true,
                             contentPadding: const EdgeInsets.symmetric(
@@ -1267,7 +1368,7 @@ class _AddCustomCardDialogState extends State<_AddCustomCardDialog> {
                         child: TextField(
                           controller: rowItem.artiController,
                           decoration: InputDecoration(
-                            hintText: 'Arti ${i + 1}',
+                            hintText: '${AppStrings.formatColumnHeader('Arti', lang)} ${i + 1}',
                             border: OutlineInputBorder(
                               borderSide: BorderSide(
                                 color: hasError ? Colors.red : Colors.grey,
@@ -1280,7 +1381,7 @@ class _AddCustomCardDialogState extends State<_AddCustomCardDialog> {
                                 width: hasError ? 2 : 1,
                               ),
                             ),
-                            errorText: hasError ? 'Kata wajib diisi' : null,
+                            errorText: hasError ? AppStrings.wordRequired(lang) : null,
                             isDense: true,
                             contentPadding: const EdgeInsets.symmetric(
                               horizontal: 10,
@@ -1306,7 +1407,7 @@ class _AddCustomCardDialogState extends State<_AddCustomCardDialog> {
                                 icon: const Icon(Icons.close, size: 18),
                                 padding: const EdgeInsets.only(top: 8, left: 4),
                                 onPressed: () => _removeRow(i),
-                                tooltip: 'Hapus baris',
+                                tooltip: AppStrings.deleteRow(lang),
                               ),
                       ),
                     ],
@@ -1319,7 +1420,7 @@ class _AddCustomCardDialogState extends State<_AddCustomCardDialog> {
                 TextButton.icon(
                   onPressed: _addRow,
                   icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Tambah baris'),
+                  label: Text(AppStrings.addRow(lang)),
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -1332,7 +1433,7 @@ class _AddCustomCardDialogState extends State<_AddCustomCardDialog> {
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
-                    'Maksimal $maxRows baris tercapai',
+                    AppStrings.maxRowsReached(lang, maxRows),
                     style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                   ),
                 ),
@@ -1343,7 +1444,7 @@ class _AddCustomCardDialogState extends State<_AddCustomCardDialog> {
       actions: [
         TextButton(
           onPressed: _isSaving ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(AppStrings.cancel(lang)),
         ),
         ElevatedButton(
           onPressed: _isSaving ? null : _handleSave,
@@ -1353,7 +1454,7 @@ class _AddCustomCardDialogState extends State<_AddCustomCardDialog> {
                   height: 16,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Save'),
+              : Text(AppStrings.save(lang)),
         ),
       ],
     );

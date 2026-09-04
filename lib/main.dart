@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/app_providers.dart';
+import 'providers/language_provider.dart';
 import 'providers/theme_provider.dart';
 import 'screens/home_screen.dart';
 
@@ -10,19 +11,31 @@ void main() async {
   final themeProvider = ThemeProvider();
   await themeProvider.loadTheme();
 
-  runApp(YorFlashCardApp(themeProvider: themeProvider));
+  final languageProvider = LanguageProvider();
+  await languageProvider.loadLanguage();
+
+  runApp(YorFlashCardApp(
+    themeProvider: themeProvider,
+    languageProvider: languageProvider,
+  ));
 }
 
 class YorFlashCardApp extends StatelessWidget {
   final ThemeProvider themeProvider;
+  final LanguageProvider languageProvider;
 
-  const YorFlashCardApp({super.key, required this.themeProvider});
+  const YorFlashCardApp({
+    super.key,
+    required this.themeProvider,
+    required this.languageProvider,
+  });
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: themeProvider),
+        ChangeNotifierProvider.value(value: languageProvider),
         ChangeNotifierProvider(create: (_) => DeckProvider()),
         ChangeNotifierProvider(create: (_) => LearningSessionProvider()),
       ],

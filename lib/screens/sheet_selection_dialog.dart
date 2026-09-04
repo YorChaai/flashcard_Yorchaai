@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/language_provider.dart';
+import '../utils/app_strings.dart';
 
 class SheetSelectionDialog extends StatelessWidget {
   final List<String> sheets;
@@ -7,8 +10,10 @@ class SheetSelectionDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageProvider>().currentLanguage;
+
     return AlertDialog(
-      title: const Text('Pilih Sheet'),
+      title: Text(lang == 'id' ? 'Pilih Sheet' : 'Select Sheet'),
       content: SizedBox(
         width: double.maxFinite,
         child: ListView.builder(
@@ -29,9 +34,10 @@ class SheetSelectionDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Batal'),
+          child: Text(AppStrings.cancel(lang)),
         ),
       ],
     );
   }
 }
+

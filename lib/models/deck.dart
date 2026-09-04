@@ -1,3 +1,4 @@
+import 'dart:math' show max;
 import 'package:uuid/uuid.dart';
 import 'flashcard_card.dart';
 
@@ -70,7 +71,7 @@ class Deck {
     final rawVisible = json['visibleColumnCount'] as int?;
     final safeVisible = rawVisible == null
         ? columnCount
-        : rawVisible.clamp(1, columnCount);
+        : rawVisible.clamp(1, max(12, columnCount)).toInt();
 
     return Deck(
       id: json['id'] as String,

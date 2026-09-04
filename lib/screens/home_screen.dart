@@ -5,16 +5,18 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import '../providers/app_providers.dart';
+import '../providers/language_provider.dart';
 import '../providers/theme_provider.dart';
 import '../models/deck.dart';
 import '../models/font_size_settings.dart';
 import '../services/excel_service.dart';
+import '../services/storage_service.dart';
+import '../utils/app_strings.dart';
 import 'deck_detail_screen.dart';
 import 'import_preview_screen.dart';
 import 'export_mapping_dialog.dart';
 import 'sheet_selection_dialog.dart';
 import 'import_mapping_dialog.dart';
-import '../services/storage_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -56,6 +58,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final langProv = context.watch<LanguageProvider>();
+    final lang = langProv.currentLanguage;
+
     return Scaffold(
       body: Consumer<DeckProvider>(
         builder: (context, deckProvider, child) {
@@ -75,8 +80,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Column(
                       children: [
                         Container(
-                          width: 84,
-                          height: 84,
+                          width: 80,
+                          height: 80,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             boxShadow: [
@@ -111,7 +116,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                         Text(
-                          'Smart Learning App',
+                          AppStrings.smartLearningApp(lang),
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.grey[600],
@@ -143,12 +148,12 @@ class _HomeScreenState extends State<HomeScreen> {
                           _StatCard(
                             icon: Icons.folder,
                             value: '${decks.length}',
-                            label: 'Datasets',
+                            label: AppStrings.datasets(lang),
                           ),
                           _StatCard(
                             icon: Icons.view_carousel,
                             value: '$totalCards',
-                            label: 'Total Cards',
+                            label: AppStrings.totalCards(lang),
                           ),
                         ],
                       ),
@@ -172,9 +177,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           }
                         : null,
                     icon: const Icon(Icons.play_arrow, size: 24, color: Colors.white),
-                    label: const Text(
-                      'START LEARNING',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                    label: Text(
+                      AppStrings.startLearning(lang),
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Theme.of(context).primaryColor,
@@ -201,7 +206,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Theme.of(context).primaryColor,
                     ),
                     label: Text(
-                      'IMPORT DATASET',
+                      AppStrings.importDataset(lang),
                       style: TextStyle(
                         color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Theme.of(context).primaryColor,
                         fontWeight: FontWeight.bold,
@@ -229,7 +234,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.grey[600],
                     ),
                     label: Text(
-                      'SETTINGS',
+                      AppStrings.settings(lang),
                       style: TextStyle(
                         color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.grey[600],
                         fontWeight: FontWeight.bold,
@@ -262,7 +267,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           const SizedBox(height: 16),
                           Text(
-                            'No datasets yet',
+                            AppStrings.noDatasets(lang),
                             style: TextStyle(
                               fontSize: 18,
                               color: Colors.grey[600],
@@ -270,7 +275,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Import an Excel file to get started',
+                            AppStrings.importExcelPrompt(lang),
                             style: TextStyle(
                               fontSize: 14,
                               color: Colors.grey[500],
@@ -290,6 +295,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _importDataset() async {
+    final lang = context.read<LanguageProvider>().currentLanguage;
     debugPrint('>>> STEP 1: Starting import...');
     try {
       debugPrint('>>> STEP 2: Opening file picker...');
@@ -328,7 +334,11 @@ class _HomeScreenState extends State<HomeScreen> {
         debugPrint('>>> ERROR: Could not read file bytes!');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Unable to read file. Please try again.')),
+            SnackBar(
+              content: Text(
+                lang == 'id' ? 'Gagal membaca file. Silakan coba lagi.' : 'Unable to read file. Please try again.',
+              ),
+            ),
           );
         }
         return;
@@ -339,12 +349,14 @@ class _HomeScreenState extends State<HomeScreen> {
         showDialog(
           context: context,
           barrierDismissible: false,
-          builder: (context) => const AlertDialog(
+          builder: (context) => AlertDialog(
             content: Row(
               children: [
-                CircularProgressIndicator(),
-                SizedBox(width: 16),
-                Expanded(child: Text('Membaca file Excel...')),
+                const CircularProgressIndicator(),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(lang == 'id' ? 'Membaca file Excel...' : 'Reading Excel file...'),
+                ),
               ],
             ),
           ),
@@ -361,7 +373,13 @@ class _HomeScreenState extends State<HomeScreen> {
       if (sheets.isEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Gagal memperbaiki file. Harap "Save As" ke file baru atau simpan sebagai CSV.')),
+            SnackBar(
+              content: Text(
+                lang == 'id'
+                    ? 'Gagal membaca file. Harap "Save As" ke file baru atau simpan sebagai CSV.'
+                    : 'Failed to read file. Please "Save As" a new file or save as CSV.',
+              ),
+            ),
           );
         }
         return;
@@ -387,12 +405,14 @@ class _HomeScreenState extends State<HomeScreen> {
           showDialog(
             context: context,
             barrierDismissible: false,
-            builder: (context) => const AlertDialog(
+            builder: (context) => AlertDialog(
               content: Row(
                 children: [
-                  CircularProgressIndicator(),
-                  SizedBox(width: 16),
-                  Expanded(child: Text('Membaca struktur sheet...')),
+                  const CircularProgressIndicator(),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Text(lang == 'id' ? 'Membaca struktur sheet...' : 'Reading sheet structure...'),
+                  ),
                 ],
               ),
             ),
@@ -447,7 +467,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (confirmed != true || !mounted) return;
 
       debugPrint('>>> STEP 13: Showing name input dialog...');
-      final name = await _showNameInputDialog(context, mappedMetadata.fileName);
+      final name = await _showNameInputDialog(context, mappedMetadata.fileName, lang);
       debugPrint('>>> STEP 14: Name input result: $name');
       if (name == null || name.isEmpty || !mounted) return;
 
@@ -455,12 +475,14 @@ class _HomeScreenState extends State<HomeScreen> {
         showDialog(
           context: context,
           barrierDismissible: false,
-          builder: (context) => const AlertDialog(
+          builder: (context) => AlertDialog(
             content: Row(
               children: [
-                CircularProgressIndicator(),
-                SizedBox(width: 16),
-                Expanded(child: Text('Menyimpan dataset...')),
+                const CircularProgressIndicator(),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(lang == 'id' ? 'Menyimpan dataset...' : 'Saving dataset...'),
+                ),
               ],
             ),
           ),
@@ -487,7 +509,11 @@ class _HomeScreenState extends State<HomeScreen> {
         debugPrint('>>> STEP 16: Deck added to provider');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Dataset imported successfully!')),
+            SnackBar(
+              content: Text(
+                lang == 'id' ? 'Dataset berhasil diimpor!' : 'Dataset imported successfully!',
+              ),
+            ),
           );
         }
         // Update selected dataset
@@ -520,29 +546,29 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<String?> _showNameInputDialog(
-      BuildContext context, String defaultName) async {
+      BuildContext context, String defaultName, String lang) async {
     final controller = TextEditingController(text: defaultName);
 
     try {
       final result = await showDialog<String>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text('Dataset Name'),
+          title: Text(lang == 'id' ? 'Nama Dataset' : 'Dataset Name'),
           content: TextField(
             controller: controller,
-            decoration: const InputDecoration(
-              labelText: 'Enter dataset name',
+            decoration: InputDecoration(
+              labelText: lang == 'id' ? 'Masukkan nama dataset' : 'Enter dataset name',
             ),
             autofocus: true,
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+              child: Text(AppStrings.cancel(lang)),
             ),
             ElevatedButton(
               onPressed: () => Navigator.pop(context, controller.text.trim()),
-              child: const Text('Save'),
+              child: Text(AppStrings.save(lang)),
             ),
           ],
         ),
@@ -579,9 +605,9 @@ class _SettingsDialog extends StatefulWidget {
 class _SettingsDialogState extends State<_SettingsDialog> {
   late String selectedPlatform;
   late TextEditingController fontSize1Controller;
-  late TextEditingController fontSize23Controller;
-  late TextEditingController fontSize45Controller;
-  late TextEditingController fontSize6Controller;
+  late TextEditingController fontSize2_5Controller;
+  late TextEditingController fontSize6_9Controller;
+  late TextEditingController fontSize10_12Controller;
 
   @override
   void initState() {
@@ -591,14 +617,14 @@ class _SettingsDialogState extends State<_SettingsDialog> {
     fontSize1Controller = TextEditingController(
       text: _formatFontSize(fontSizeSettings.currentFontSize1),
     );
-    fontSize23Controller = TextEditingController(
-      text: _formatFontSize(fontSizeSettings.currentFontSize23),
+    fontSize2_5Controller = TextEditingController(
+      text: _formatFontSize(fontSizeSettings.currentFontSize2_5),
     );
-    fontSize45Controller = TextEditingController(
-      text: _formatFontSize(fontSizeSettings.currentFontSize45),
+    fontSize6_9Controller = TextEditingController(
+      text: _formatFontSize(fontSizeSettings.currentFontSize6_9),
     );
-    fontSize6Controller = TextEditingController(
-      text: _formatFontSize(fontSizeSettings.currentFontSize6),
+    fontSize10_12Controller = TextEditingController(
+      text: _formatFontSize(fontSizeSettings.currentFontSize10_12),
     );
   }
 
@@ -618,9 +644,9 @@ class _SettingsDialogState extends State<_SettingsDialog> {
   @override
   void dispose() {
     fontSize1Controller.dispose();
-    fontSize23Controller.dispose();
-    fontSize45Controller.dispose();
-    fontSize6Controller.dispose();
+    fontSize2_5Controller.dispose();
+    fontSize6_9Controller.dispose();
+    fontSize10_12Controller.dispose();
     super.dispose();
   }
 
@@ -630,22 +656,25 @@ class _SettingsDialogState extends State<_SettingsDialog> {
       selectedPlatform = platform;
       if (platform == 'Mobile/HP') {
         fontSize1Controller.text = _formatFontSize(fontSizeSettings.mobileFontSize1);
-        fontSize23Controller.text = _formatFontSize(fontSizeSettings.mobileFontSize23);
-        fontSize45Controller.text = _formatFontSize(fontSizeSettings.mobileFontSize45);
-        fontSize6Controller.text = _formatFontSize(fontSizeSettings.mobileFontSize6);
+        fontSize2_5Controller.text = _formatFontSize(fontSizeSettings.mobileFontSize2_5);
+        fontSize6_9Controller.text = _formatFontSize(fontSizeSettings.mobileFontSize6_9);
+        fontSize10_12Controller.text = _formatFontSize(fontSizeSettings.mobileFontSize10_12);
       } else {
         fontSize1Controller.text = _formatFontSize(fontSizeSettings.pcFontSize1);
-        fontSize23Controller.text = _formatFontSize(fontSizeSettings.pcFontSize23);
-        fontSize45Controller.text = _formatFontSize(fontSizeSettings.pcFontSize45);
-        fontSize6Controller.text = _formatFontSize(fontSizeSettings.pcFontSize6);
+        fontSize2_5Controller.text = _formatFontSize(fontSizeSettings.pcFontSize2_5);
+        fontSize6_9Controller.text = _formatFontSize(fontSizeSettings.pcFontSize6_9);
+        fontSize10_12Controller.text = _formatFontSize(fontSizeSettings.pcFontSize10_12);
       }
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    final langProv = context.watch<LanguageProvider>();
+    final lang = langProv.currentLanguage;
+
     return AlertDialog(
-      title: const Text('Settings'),
+      title: Text(AppStrings.settingsTitle(lang)),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -655,8 +684,8 @@ class _SettingsDialogState extends State<_SettingsDialog> {
             Consumer<ThemeProvider>(
               builder: (context, themeProv, child) {
                 return SwitchListTile(
-                  title: const Text('Dark Mode'),
-                  subtitle: const Text('Toggle dark/light theme'),
+                  title: Text(AppStrings.darkMode(lang)),
+                  subtitle: Text(AppStrings.darkModeSubtitle(lang)),
                   value: themeProv.isDarkMode,
                   onChanged: (value) {
                     themeProv.toggleTheme();
@@ -668,9 +697,9 @@ class _SettingsDialogState extends State<_SettingsDialog> {
             const Divider(height: 24),
 
             // Font Size Settings
-            const Text(
-              'Font Size Settings',
-              style: TextStyle(
+            Text(
+              AppStrings.fontSizeSettings(lang),
+              style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
               ),
@@ -680,7 +709,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
             // Platform Dropdown
             Row(
               children: [
-                const Text('Platform: '),
+                Text(AppStrings.platform(lang)),
                 const SizedBox(width: 8),
                 DropdownButton<String>(
                   value: selectedPlatform,
@@ -718,43 +747,43 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                     controller: fontSize1Controller,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
-                    decoration: const InputDecoration(
-                      labelText: 'Kolom 1 (Atas Tengah)',
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: InputDecoration(
+                      labelText: AppStrings.col1(lang),
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     ),
                   ),
                   const SizedBox(height: 12),
                   TextField(
-                    controller: fontSize23Controller,
+                    controller: fontSize2_5Controller,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
-                    decoration: const InputDecoration(
-                      labelText: 'Kolom 2 & 3',
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: InputDecoration(
+                      labelText: AppStrings.col2_5(lang),
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     ),
                   ),
                   const SizedBox(height: 12),
                   TextField(
-                    controller: fontSize45Controller,
+                    controller: fontSize6_9Controller,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
-                    decoration: const InputDecoration(
-                      labelText: 'Kolom 4 & 5',
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: InputDecoration(
+                      labelText: AppStrings.col6_9(lang),
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     ),
                   ),
                   const SizedBox(height: 12),
                   TextField(
-                    controller: fontSize6Controller,
+                    controller: fontSize10_12Controller,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))],
-                    decoration: const InputDecoration(
-                      labelText: 'Kolom 6 (Bawah)',
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: InputDecoration(
+                      labelText: AppStrings.col10_12(lang),
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     ),
                   ),
                 ],
@@ -766,21 +795,21 @@ class _SettingsDialogState extends State<_SettingsDialog> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Manage Files / Datasets',
-                        style: TextStyle(
+                        AppStrings.manageFiles(lang),
+                        style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      SizedBox(height: 2),
+                      const SizedBox(height: 2),
                       Text(
-                        'Edit nama atau hapus file import',
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                        AppStrings.manageFilesSubtitle(lang),
+                        style: const TextStyle(fontSize: 12, color: Colors.grey),
                       ),
                     ],
                   ),
@@ -788,7 +817,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
                 ElevatedButton.icon(
                   onPressed: () => _showManageFilesDialog(context),
                   icon: const Icon(Icons.folder_shared_rounded, size: 16),
-                  label: const Text('Manage Files', style: TextStyle(fontSize: 12)),
+                  label: Text(AppStrings.manageFilesButton(lang), style: const TextStyle(fontSize: 12)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blueAccent,
                     foregroundColor: Colors.white,
@@ -799,11 +828,57 @@ class _SettingsDialogState extends State<_SettingsDialog> {
               ],
             ),
             const Divider(height: 24),
+
+            // === Language Switch (Antara Manage Files dan Export Data) ===
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        AppStrings.language(lang),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        AppStrings.languageSubtitle(lang),
+                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+                DropdownButton<String>(
+                  value: langProv.currentLanguage,
+                  borderRadius: BorderRadius.circular(8),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'en',
+                      child: Text('English 🇺🇸'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'id',
+                      child: Text('Indonesia 🇮🇩'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      langProv.setLanguage(value);
+                    }
+                  },
+                ),
+              ],
+            ),
+            const Divider(height: 24),
             
             // Export Settings
-            const Text(
-              'Export Data',
-              style: TextStyle(
+            Text(
+              AppStrings.exportData(lang),
+              style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
               ),
@@ -812,7 +887,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
             Consumer<DeckProvider>(
               builder: (context, deckProvider, child) {
                 if (deckProvider.decks.isEmpty) {
-                  return const Text('Tidak ada deck untuk di-export.');
+                  return Text(AppStrings.noDeckToExport(lang));
                 }
                 return _ExportDeckWidget(decks: deckProvider.decks);
               },
@@ -823,22 +898,22 @@ class _SettingsDialogState extends State<_SettingsDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(AppStrings.cancel(lang)),
         ),
         ElevatedButton(
           onPressed: () async {
             final fontSizeSettings = widget.themeProvider.fontSizeSettings;
 
             final newSize1 = _parseFontSize(fontSize1Controller.text, 40.0);
-            final newSize23 = _parseFontSize(fontSize23Controller.text, 16.0);
-            final newSize45 = _parseFontSize(fontSize45Controller.text, 12.0);
-            final newSize6 = _parseFontSize(fontSize6Controller.text, 12.0);
+            final newSize2_5 = _parseFontSize(fontSize2_5Controller.text, 16.0);
+            final newSize6_9 = _parseFontSize(fontSize6_9Controller.text, 13.0);
+            final newSize10_12 = _parseFontSize(fontSize10_12Controller.text, 11.0);
 
-            if (newSize1 <= 0 || newSize23 <= 0 || newSize45 <= 0 || newSize6 <= 0) {
+            if (newSize1 <= 0 || newSize2_5 <= 0 || newSize6_9 <= 0 || newSize10_12 <= 0) {
               if (!mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Font size harus lebih dari 0'),
+                SnackBar(
+                  content: Text(AppStrings.fontSizeError(lang)),
                   backgroundColor: Colors.red,
                 ),
               );
@@ -849,16 +924,16 @@ class _SettingsDialogState extends State<_SettingsDialog> {
             if (selectedPlatform == 'Mobile/HP') {
               updatedSettings = fontSizeSettings.copyWith(
                 mobileFontSize1: newSize1,
-                mobileFontSize23: newSize23,
-                mobileFontSize45: newSize45,
-                mobileFontSize6: newSize6,
+                mobileFontSize2_5: newSize2_5,
+                mobileFontSize6_9: newSize6_9,
+                mobileFontSize10_12: newSize10_12,
               );
             } else {
               updatedSettings = fontSizeSettings.copyWith(
                 pcFontSize1: newSize1,
-                pcFontSize23: newSize23,
-                pcFontSize45: newSize45,
-                pcFontSize6: newSize6,
+                pcFontSize2_5: newSize2_5,
+                pcFontSize6_9: newSize6_9,
+                pcFontSize10_12: newSize10_12,
               );
             }
 
@@ -868,7 +943,7 @@ class _SettingsDialogState extends State<_SettingsDialog> {
               Navigator.of(context).pop();
             }
           },
-          child: const Text('Save'),
+          child: Text(AppStrings.save(lang)),
         ),
       ],
     );
@@ -886,35 +961,36 @@ class _ManageFilesDialog extends StatelessWidget {
   const _ManageFilesDialog();
 
   void _showRenameDialog(BuildContext context, Deck deck) {
+    final lang = context.read<LanguageProvider>().currentLanguage;
     final controller = TextEditingController(text: deck.name);
 
     showDialog(
       context: context,
       builder: (dialogCtx) => AlertDialog(
-        title: const Row(
+        title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.edit_note_rounded, color: Colors.blueAccent),
-            SizedBox(width: 8),
-            Flexible(child: Text('Ubah Nama File / Dataset')),
+            const Icon(Icons.edit_note_rounded, color: Colors.blueAccent),
+            const SizedBox(width: 8),
+            Flexible(child: Text(lang == 'id' ? 'Ubah Nama File / Dataset' : 'Rename File / Dataset')),
           ],
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Masukkan nama baru untuk dataset ini:',
-              style: TextStyle(fontSize: 13),
+            Text(
+              lang == 'id' ? 'Masukkan nama baru untuk dataset ini:' : 'Enter a new name for this dataset:',
+              style: const TextStyle(fontSize: 13),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: controller,
               autofocus: true,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                labelText: 'Nama Dataset',
+              decoration: InputDecoration(
+                border: const OutlineInputBorder(),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                labelText: lang == 'id' ? 'Nama Dataset' : 'Dataset Name',
                 isDense: true,
               ),
             ),
@@ -923,7 +999,7 @@ class _ManageFilesDialog extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogCtx),
-            child: const Text('Batal'),
+            child: Text(AppStrings.cancel(lang)),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -937,7 +1013,11 @@ class _ManageFilesDialog extends StatelessWidget {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Nama dataset berhasil diubah menjadi "$newName"'),
+                      content: Text(
+                        lang == 'id'
+                            ? 'Nama dataset berhasil diubah menjadi "$newName"'
+                            : 'Dataset name changed to "$newName" successfully',
+                      ),
                       backgroundColor: Colors.green,
                     ),
                   );
@@ -946,7 +1026,7 @@ class _ManageFilesDialog extends StatelessWidget {
                 Navigator.pop(dialogCtx);
               }
             },
-            child: const Text('Simpan'),
+            child: Text(AppStrings.save(lang)),
           ),
         ],
       ),
@@ -954,26 +1034,29 @@ class _ManageFilesDialog extends StatelessWidget {
   }
 
   void _showDeleteDialog(BuildContext context, Deck deck) {
+    final lang = context.read<LanguageProvider>().currentLanguage;
+
     showDialog(
       context: context,
       builder: (dialogCtx) => AlertDialog(
-        title: const Row(
+        title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.delete_forever_rounded, color: Colors.redAccent),
-            SizedBox(width: 8),
-            Flexible(child: Text('Hapus Dataset')),
+            const Icon(Icons.delete_forever_rounded, color: Colors.redAccent),
+            const SizedBox(width: 8),
+            Flexible(child: Text(lang == 'id' ? 'Hapus Dataset' : 'Delete Dataset')),
           ],
         ),
         content: Text(
-          'Yakin ingin menghapus file/dataset "${deck.name}"?\n\n'
-          'Seluruh ${deck.totalCards} kartu dalam dataset ini akan dihapus dari aplikasi.',
+          lang == 'id'
+              ? 'Yakin ingin menghapus file/dataset "${deck.name}"?\n\nSeluruh ${deck.totalCards} kartu dalam dataset ini akan dihapus dari aplikasi.'
+              : 'Are you sure you want to delete file/dataset "${deck.name}"?\n\nAll ${deck.totalCards} cards in this dataset will be deleted from the application.',
           style: const TextStyle(fontSize: 14),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogCtx),
-            child: const Text('Batal'),
+            child: Text(AppStrings.cancel(lang)),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -985,14 +1068,18 @@ class _ManageFilesDialog extends StatelessWidget {
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('Dataset "${deck.name}" berhasil dihapus'),
+                    content: Text(
+                      lang == 'id'
+                          ? 'Dataset "${deck.name}" berhasil dihapus'
+                          : 'Dataset "${deck.name}" deleted successfully',
+                    ),
                     backgroundColor: Colors.orange,
                   ),
                 );
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Hapus', style: TextStyle(color: Colors.white)),
+            child: Text(AppStrings.delete(lang), style: const TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -1001,16 +1088,18 @@ class _ManageFilesDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageProvider>().currentLanguage;
+
     return AlertDialog(
-      title: const Row(
+      title: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.folder_shared_rounded, color: Colors.blueAccent),
-          SizedBox(width: 10),
+          const Icon(Icons.folder_shared_rounded, color: Colors.blueAccent),
+          const SizedBox(width: 10),
           Flexible(
             child: Text(
-              'Manage Files / Datasets',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              AppStrings.manageFiles(lang),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
           ),
         ],
@@ -1021,10 +1110,10 @@ class _ManageFilesDialog extends StatelessWidget {
           builder: (context, provider, child) {
             final decks = provider.decks;
             if (decks.isEmpty) {
-              return const Padding(
-                padding: EdgeInsets.all(24.0),
+              return Padding(
+                padding: const EdgeInsets.all(24.0),
                 child: Center(
-                  child: Text('Belum ada dataset yang diimpor.'),
+                  child: Text(lang == 'id' ? 'Belum ada dataset yang diimpor.' : 'No datasets imported yet.'),
                 ),
               );
             }
@@ -1058,7 +1147,9 @@ class _ManageFilesDialog extends StatelessWidget {
                       maxLines: 2,
                     ),
                     subtitle: Text(
-                      '${deck.totalCards} kartu • ${deck.columnCount} kolom',
+                      lang == 'id'
+                          ? '${deck.totalCards} kartu • ${deck.columnCount} kolom'
+                          : '${deck.totalCards} cards • ${deck.columnCount} columns',
                       style: TextStyle(fontSize: 12, color: Colors.grey[400]),
                     ),
                     trailing: Row(
@@ -1066,13 +1157,13 @@ class _ManageFilesDialog extends StatelessWidget {
                       children: [
                         IconButton(
                           icon: const Icon(Icons.edit_outlined, color: Colors.blue, size: 20),
-                          tooltip: 'Ubah Nama File',
+                          tooltip: lang == 'id' ? 'Ubah Nama File' : 'Rename File',
                           onPressed: () => _showRenameDialog(context, deck),
                         ),
                         if (!isCustom)
                           IconButton(
                             icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 20),
-                            tooltip: 'Hapus File',
+                            tooltip: lang == 'id' ? 'Hapus File' : 'Delete File',
                             onPressed: () => _showDeleteDialog(context, deck),
                           ),
                       ],
@@ -1087,7 +1178,7 @@ class _ManageFilesDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Tutup'),
+          child: Text(AppStrings.close(lang)),
         ),
       ],
     );

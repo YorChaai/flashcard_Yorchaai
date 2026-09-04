@@ -5,12 +5,14 @@ import 'package:yor_flashcard/models/deck.dart';
 import 'package:yor_flashcard/models/flashcard_card.dart';
 import 'package:yor_flashcard/models/order_mode.dart';
 import 'package:yor_flashcard/providers/app_providers.dart';
+import 'package:yor_flashcard/providers/language_provider.dart';
 import 'package:yor_flashcard/providers/theme_provider.dart';
 import 'package:yor_flashcard/screens/flashcard_screen.dart';
 
 void main() {
   testWidgets('FlashcardScreen Next to Finish behavior on last card with Back navigation', (WidgetTester tester) async {
     final themeProvider = ThemeProvider();
+    final languageProvider = LanguageProvider();
     final deckProvider = DeckProvider();
     final sessionProvider = LearningSessionProvider();
 
@@ -32,6 +34,7 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider.value(value: themeProvider),
+          ChangeNotifierProvider.value(value: languageProvider),
           ChangeNotifierProvider.value(value: deckProvider),
           ChangeNotifierProvider.value(value: sessionProvider),
         ],
@@ -80,7 +83,7 @@ void main() {
     await tester.pump();
 
     // SnackBar should appear
-    expect(find.text('Prompt berhasil disalin ke clipboard!'), findsOneWidget);
+    expect(find.text('Prompt copied to clipboard!'), findsOneWidget);
 
     // Tap Finish -> Navigates to ResultScreen
     await tester.tap(find.text('Finish'));

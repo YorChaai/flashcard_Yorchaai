@@ -18,6 +18,7 @@ void main() {
         rangeStart: 40,
         rangeEnd: 60,
         orderMode: OrderMode.reverse,
+        lastSelectedFilterColumn: 'cerf',
       );
 
       final jsonMap = originalConfig.toJson();
@@ -32,6 +33,7 @@ void main() {
       expect(restoredConfig.selectedFilterTypes, {'NOUN', 'VERB'});
       expect(restoredConfig.selectedFilterCefr, {'A1', 'A2', 'B1'});
       expect(restoredConfig.selectedFilterScore, {'<0', '>0'});
+      expect(restoredConfig.lastSelectedFilterColumn, 'cerf');
       expect(restoredConfig.rangeStart, 40);
       expect(restoredConfig.rangeEnd, 60);
       expect(restoredConfig.orderMode, OrderMode.reverse);
@@ -45,6 +47,7 @@ void main() {
         selectedFilterTypes: {'NOUN'},
         selectedFilterCefr: {'A1'},
         selectedFilterScore: {'0'},
+        lastSelectedFilterColumn: 'type',
         rangeStart: 1,
         rangeEnd: 100,
       );
@@ -61,6 +64,7 @@ void main() {
       expect(updatedConfig.selectedFilterTypes, {'NOUN'});
       expect(updatedConfig.selectedFilterCefr, {'A1'});
       expect(updatedConfig.selectedFilterScore, {'0'});
+      expect(updatedConfig.lastSelectedFilterColumn, 'type');
       expect(updatedConfig.rangeStart, 60);
       expect(updatedConfig.rangeEnd, 70);
     });

@@ -43,3 +43,10 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Graphify knowledge graph (local output)
+graphify-out/
+
+# Large raw dictionaries
+tools/jmdict-eng.json
+
