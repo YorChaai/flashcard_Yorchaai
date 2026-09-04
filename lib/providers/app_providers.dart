@@ -629,9 +629,8 @@ class DeckProvider extends ChangeNotifier {
         if (typeColIdx < card.columns.length) {
           final raw = card.columns[typeColIdx].trim();
           if (raw.isNotEmpty && raw != '-') {
-            final tokens = raw.split(RegExp(r'[,/]')).map((e) {
-              return e.replaceAll(RegExp(r'\(.*?\)'), '').trim().toUpperCase();
-            }).where((e) => e.isNotEmpty);
+            final clean = raw.replaceAll(RegExp(r'\(.*?\)'), ' ').trim();
+            final tokens = clean.split(RegExp(r'[,/]')).map((e) => e.trim().toUpperCase()).where((e) => e.isNotEmpty);
             allUniqueTypes.addAll(tokens);
           }
         }
@@ -642,9 +641,8 @@ class DeckProvider extends ChangeNotifier {
           if (typeColIdx >= card.columns.length) return false;
           final raw = card.columns[typeColIdx].trim();
           if (raw.isEmpty || raw == '-') return false;
-          final tokens = raw.split(RegExp(r'[,/]')).map((e) {
-            return e.replaceAll(RegExp(r'\(.*?\)'), '').trim().toUpperCase();
-          }).where((e) => e.isNotEmpty).toList();
+          final clean = raw.replaceAll(RegExp(r'\(.*?\)'), ' ').trim();
+          final tokens = clean.split(RegExp(r'[,/]')).map((e) => e.trim().toUpperCase()).where((e) => e.isNotEmpty).toList();
           return tokens.any((t) => config.selectedFilterTypes.contains(t));
         }).toList();
       }
@@ -714,11 +712,13 @@ class DeckProvider extends ChangeNotifier {
           int getTopPriority(FlashcardCard card) {
             final raw = typeColIdx! < card.columns.length ? card.columns[typeColIdx] : '';
             if (raw.isEmpty) return 999999;
-            final tokens = raw.split(RegExp(r'[,/]'));
+            final clean = raw.replaceAll(RegExp(r'\(.*?\)'), ' ').trim();
+            if (clean.isEmpty) return 999999;
+            final tokens = clean.split(RegExp(r'[,/]'));
             int minP = 999999;
             for (final t in tokens) {
-              final clean = t.replaceAll(RegExp(r'\(.*?\)'), '').trim().toUpperCase();
-              final p = priorityMap[clean] ?? (priorityMap[t.trim().toUpperCase()] ?? 999999);
+              final cleanToken = t.trim().toUpperCase();
+              final p = priorityMap[cleanToken] ?? 999999;
               if (p < minP) minP = p;
             }
             return minP;
@@ -761,11 +761,13 @@ class DeckProvider extends ChangeNotifier {
             int getTopPriority(FlashcardCard card) {
               final raw = headerIdx < card.columns.length ? card.columns[headerIdx] : '';
               if (raw.isEmpty) return 999999;
-              final tokens = raw.split(RegExp(r'[,/]'));
+              final clean = raw.replaceAll(RegExp(r'\(.*?\)'), ' ').trim();
+              if (clean.isEmpty) return 999999;
+              final tokens = clean.split(RegExp(r'[,/]'));
               int minP = 999999;
               for (final t in tokens) {
-                final clean = t.replaceAll(RegExp(r'\(.*?\)'), '').trim().toUpperCase();
-                final p = priorityMap[clean] ?? (priorityMap[t.trim().toUpperCase()] ?? 999999);
+                final cleanToken = t.trim().toUpperCase();
+                final p = priorityMap[cleanToken] ?? 999999;
                 if (p < minP) minP = p;
               }
               return minP;

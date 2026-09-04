@@ -397,6 +397,70 @@ test('Dynamic Column Filtering works for arbitrary columns (e.g. Category & Stat
       expect(sorted[7].columns[0], 'one'); // Row 9 (ADJ, NOUN)
       expect(sorted[8].columns[0], 'other'); // Row 10 (pure ADJ)
     });
+
+    test('Exact User Scenario: Parentheses in type like "noun (brand/name)" and "noun (tech/modern)" are stripped before slash split and parsed strictly as NOUN without "modern)" or "name)"', () {
+      final bracketRegExp = RegExp(r'[\(\[\{].*?[\)\]\}]');
+
+      String cleanTypeString(String raw) {
+        var s = raw;
+        if (s.contains('(') || s.contains('[') || s.contains('{')) {
+          s = s.replaceAll(bracketRegExp, ' ');
+        }
+        if (s.contains(')') || s.contains(']') || s.contains('}') || s.contains('(') || s.contains('[') || s.contains('{')) {
+          s = s.replaceAll(RegExp(r'[\(\)\[\]\{\}]'), ' ');
+        }
+        return s.trim();
+      }
+
+      List<String> getCardBaseTypes(String raw) {
+        final clean = cleanTypeString(raw);
+        if (clean.isEmpty) return [];
+        final tokens = clean.split(RegExp(r'[,/]'));
+        final result = <String>[];
+        for (final t in tokens) {
+          final trimmed = t.trim().toUpperCase();
+          if (trimmed.isNotEmpty && !result.contains(trimmed)) {
+            result.add(trimmed);
+          }
+        }
+        return result;
+      }
+
+      // Test raw types from user's dataset
+      final brandNameTypes = getCardBaseTypes('noun (brand/name)');
+      final techModernTypes = getCardBaseTypes('noun (tech/modern)');
+      final multiWithParen = getCardBaseTypes('noun (brand/name), verb');
+
+      expect(brandNameTypes, ['NOUN']);
+      expect(brandNameTypes.contains('NAME)'), isFalse);
+      expect(brandNameTypes.contains('brand/name'), isFalse);
+
+      expect(techModernTypes, ['NOUN']);
+      expect(techModernTypes.contains('MODERN)'), isFalse);
+      expect(techModernTypes.contains('tech/modern'), isFalse);
+
+      expect(multiWithParen, ['NOUN', 'VERB']);
+
+      // Priority sort test with these cards
+      final cards = [
+        FlashcardCard(id: 'c1', columns: ['Apple', 'noun (brand/name)']),
+        FlashcardCard(id: 'c2', columns: ['Internet', 'noun (tech/modern)']),
+      ];
+
+      final priorityMap = {'NOUN': 0, 'VERB': 1};
+      int getTopPriority(FlashcardCard card) {
+        final types = getCardBaseTypes(card.columns[1]);
+        int minP = 999999;
+        for (final t in types) {
+          final p = priorityMap[t] ?? 999999;
+          if (p < minP) minP = p;
+        }
+        return minP;
+      }
+
+      expect(getTopPriority(cards[0]), 0);
+      expect(getTopPriority(cards[1]), 0);
+    });
   });
 }
 

@@ -97,13 +97,17 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
       _sortColumnIndex = config.sortColumnIndex;
       _sortAscending = config.sortAscending;
       if (config.typeSortPriority.isNotEmpty) {
-        _typeSortPriority = List.from(config.typeSortPriority);
+        _typeSortPriority = _sanitizeTypeList(config.typeSortPriority);
       }
       _cefrSortAscending = config.cefrSortAscending;
       _scoreSortAscending = config.scoreSortAscending;
 
       if (config.selectedFilterTypes.isNotEmpty) {
-        _selectedFilterTypes = Set.from(config.selectedFilterTypes);
+        final cleaned = config.selectedFilterTypes
+            .map((e) => _cleanTypeString(e).trim().toUpperCase())
+            .where((e) => _allUniqueTypes.contains(e))
+            .toSet();
+        _selectedFilterTypes = cleaned.isNotEmpty ? cleaned : Set.from(_allUniqueTypes);
         _isTypeFilterInitialized = true;
       }
 
@@ -155,14 +159,18 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
       _sortColumnIndex = config.sortColumnIndex;
       _sortAscending = config.sortAscending;
       if (config.typeSortPriority.isNotEmpty) {
-        _typeSortPriority = List.from(config.typeSortPriority);
+        _typeSortPriority = _sanitizeTypeList(config.typeSortPriority);
         _formattedTypeCache.clear();
       }
       _cefrSortAscending = config.cefrSortAscending;
       _scoreSortAscending = config.scoreSortAscending;
 
       if (config.selectedFilterTypes.isNotEmpty) {
-        _selectedFilterTypes = Set.from(config.selectedFilterTypes);
+        final cleaned = config.selectedFilterTypes
+            .map((e) => _cleanTypeString(e).trim().toUpperCase())
+            .where((e) => _allUniqueTypes.contains(e))
+            .toSet();
+        _selectedFilterTypes = cleaned.isNotEmpty ? cleaned : Set.from(_allUniqueTypes);
         _isTypeFilterInitialized = true;
       }
 
@@ -256,17 +264,36 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
     return null;
   }
 
-  static final RegExp _parenRegExp = RegExp(r'\(.*?\)');
+  static final RegExp _bracketRegExp = RegExp(r'[\(\[\{].*?[\)\]\}]');
 
-  String _cleanTypeToken(String token) {
-    if (!token.contains('(')) return token.trim();
-    final idx = token.indexOf('(');
-    if (idx != -1) {
-      final sub = token.substring(0, idx).trim();
-      if (sub.isNotEmpty) return sub;
+  String _cleanTypeString(String raw) {
+    var s = raw;
+    if (s.contains('(') || s.contains('[') || s.contains('{')) {
+      s = s.replaceAll(_bracketRegExp, ' ');
     }
-    final withoutParen = token.replaceAll(_parenRegExp, '').trim();
-    return withoutParen.isNotEmpty ? withoutParen : token.trim();
+    if (s.contains(')') || s.contains(']') || s.contains('}') || s.contains('(') || s.contains('[') || s.contains('{')) {
+      s = s.replaceAll(RegExp(r'[\(\)\[\]\{\}]'), ' ');
+    }
+    return s.trim();
+  }
+
+  List<String> _sanitizeTypeList(Iterable<String> types) {
+    final result = <String>[];
+    for (final raw in types) {
+      final clean = _cleanTypeString(raw);
+      for (final tok in clean.split(RegExp(r'[,/]'))) {
+        final t = tok.trim().toUpperCase();
+        if (t.isNotEmpty && !result.contains(t)) {
+          if (_allUniqueTypes.isEmpty || _allUniqueTypes.contains(t)) {
+            result.add(t);
+          }
+        }
+      }
+    }
+    for (final u in _allUniqueTypes) {
+      if (!result.contains(u)) result.add(u);
+    }
+    return result;
   }
 
   final Map<String, String> _formattedTypeCache = {};
@@ -276,25 +303,22 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
     final cached = _formattedTypeCache[rawType];
     if (cached != null) return cached;
 
+    final clean = _cleanTypeString(rawType);
+    if (clean.isEmpty) return rawType;
+
     final priorityMap = <String, int>{};
     for (int i = 0; i < _typeSortPriority.length; i++) {
       priorityMap[_typeSortPriority[i].toUpperCase().trim()] = i;
     }
 
-    final hasDelimiter = rawType.contains(',') || rawType.contains('/');
-    if (!hasDelimiter) {
-      final res = rawType.trim();
-      _formattedTypeCache[rawType] = res;
-      return res;
-    }
-
-    final tokens = rawType.split(RegExp(r'[,/]'));
+    final tokens = clean.split(RegExp(r'[,/]'));
     final parsedTokens = <Map<String, dynamic>>[];
+    final seen = <String>{};
     for (final tok in tokens) {
-      final trimmed = tok.trim();
-      if (trimmed.isEmpty) continue;
-      final clean = _cleanTypeToken(trimmed).toUpperCase();
-      final p = priorityMap[clean] ?? (priorityMap[trimmed.toUpperCase()] ?? 999999);
+      final trimmed = tok.trim().toUpperCase();
+      if (trimmed.isEmpty || seen.contains(trimmed)) continue;
+      seen.add(trimmed);
+      final p = priorityMap[trimmed] ?? 999999;
       parsedTokens.add({
         'original': trimmed,
         'priority': p,
@@ -316,9 +340,19 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
     if (typeColIdx >= card.columns.length) return [];
     final raw = card.columns[typeColIdx].trim();
     if (raw.isEmpty) return [];
-    return (raw.contains(',') || raw.contains('/'))
-        ? raw.split(RegExp(r'[,/]')).map((e) => _cleanTypeToken(e)).where((e) => e.isNotEmpty).toList()
-        : [_cleanTypeToken(raw)].where((e) => e.isNotEmpty).toList();
+
+    final clean = _cleanTypeString(raw);
+    if (clean.isEmpty) return [];
+
+    final tokens = clean.split(RegExp(r'[,/]'));
+    final result = <String>[];
+    for (final t in tokens) {
+      final trimmed = t.trim().toUpperCase();
+      if (trimmed.isNotEmpty && !result.contains(trimmed)) {
+        result.add(trimmed);
+      }
+    }
+    return result;
   }
 
   int _getCardTopPriority(FlashcardCard card, int typeColIdx, Map<String, int> priorityMap) {
@@ -326,18 +360,15 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
     final raw = card.columns[typeColIdx].trim();
     if (raw.isEmpty) return 999999;
 
-    int minPriority = 999999;
-    if (!raw.contains(',') && !raw.contains('/')) {
-      final clean = _cleanTypeToken(raw).toUpperCase();
-      return priorityMap[clean] ?? (priorityMap[raw.toUpperCase()] ?? 999999);
-    }
+    final clean = _cleanTypeString(raw);
+    if (clean.isEmpty) return 999999;
 
-    final tokens = raw.split(RegExp(r'[,/]'));
+    int minPriority = 999999;
+    final tokens = clean.split(RegExp(r'[,/]'));
     for (final tok in tokens) {
-      final trimmed = tok.trim();
+      final trimmed = tok.trim().toUpperCase();
       if (trimmed.isEmpty) continue;
-      final clean = _cleanTypeToken(trimmed).toUpperCase();
-      final p = priorityMap[clean] ?? (priorityMap[trimmed.toUpperCase()] ?? 999999);
+      final p = priorityMap[trimmed] ?? 999999;
       if (p < minPriority) minPriority = p;
     }
     return minPriority;
@@ -347,10 +378,14 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
     if (header == 'Score') {
       return ['+ (Score > 0)', '0 (Score = 0)', '- (Score < 0)'];
     }
+    final typeIdx = _getTypeColumnIndex();
+    final idx = colIdx ?? widget.columnHeaders.indexWhere((h) => h.trim().toLowerCase() == header.trim().toLowerCase());
+    if (idx != -1 && idx == typeIdx) {
+      return List.from(_allUniqueTypes);
+    }
     if (_allColumnUniqueValues.containsKey(header)) {
       return _allColumnUniqueValues[header]!;
     }
-    final idx = colIdx ?? widget.columnHeaders.indexOf(header);
     if (idx == -1) return [];
 
     final set = <String>{};
@@ -402,10 +437,17 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
     _allUniqueTypes = set.toList()..sort();
     if (_typeSortPriority.isEmpty) {
       _typeSortPriority = List.from(_allUniqueTypes);
+    } else {
+      _typeSortPriority = _sanitizeTypeList(_typeSortPriority);
     }
     if (!_isTypeFilterInitialized) {
       _selectedFilterTypes = Set.from(_allUniqueTypes);
       _isTypeFilterInitialized = true;
+    } else {
+      _selectedFilterTypes = _selectedFilterTypes.where((t) => _allUniqueTypes.contains(t)).toSet();
+      if (_selectedFilterTypes.isEmpty) {
+        _selectedFilterTypes = Set.from(_allUniqueTypes);
+      }
     }
   }
 
@@ -480,12 +522,24 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
             matches = false;
             break;
           }
+
+          if (colIdx == typeColIdx) {
+            final cardTypes = _getCardBaseTypes(card, colIdx);
+            if (cardTypes.isEmpty) {
+              if (allowed.contains('(Empty)')) continue;
+            } else {
+              if (cardTypes.any((t) => allowed.contains(t))) continue;
+            }
+            matches = false;
+            break;
+          }
+
           final val = colIdx < card.columns.length ? card.columns[colIdx].trim() : '';
           final checkVal = val.isEmpty ? '(Empty)' : val;
           if (allowed.contains(checkVal)) continue;
 
-          if (val.contains(',')) {
-            final tags = val.split(',');
+          if (val.contains(',') || val.contains('/')) {
+            final tags = val.split(RegExp(r'[,/]'));
             bool foundTag = false;
             for (final tag in tags) {
               final t = tag.trim();
@@ -2001,6 +2055,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
         children: [
           Expanded(
             child: SingleChildScrollView(
+              physics: const ClampingScrollPhysics(),
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2654,17 +2709,23 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
               )
             else
               SingleChildScrollView(
+                physics: const ClampingScrollPhysics(),
                 scrollDirection: Axis.horizontal,
                 child: DataTable(
                   showCheckboxColumn: false,
                   sortColumnIndex: _sortColumnIndex,
                   sortAscending: _sortAscending,
-                  columnSpacing: 24.0,
+                  columnSpacing: 18.0,
                   dataRowMinHeight: 48,
-                  dataRowMaxHeight: double.infinity,
+                  dataRowMaxHeight: 48,
                   columns: [
                     DataColumn(
-                      label: const Text('No.', style: TextStyle(fontWeight: FontWeight.bold)),
+                      label: Tooltip(
+                        message: lang == 'id'
+                            ? 'Tekan lama nomor baris No. untuk memilih'
+                            : 'Long press row No. to select',
+                        child: const Text('No.', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
                       onSort: (colIdx, asc) => _onSort(0, asc),
                     ),
                     for (int i = 0; i < widget.columnHeaders.length; i++)
@@ -2710,20 +2771,23 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return DataRow(
-      color: WidgetStateProperty.resolveWith<Color?>((states) {
-        if (isSelected) return Colors.green.withValues(alpha: 0.15);
-        return null;
-      }),
+      color: isSelected
+          ? const WidgetStatePropertyAll<Color?>(Color(0x264CAF50))
+          : null,
       cells: [
         DataCell(
-          Tooltip(
-            message: _selectedCardIds.isEmpty
-                ? (lang == 'id' ? 'Tekan lama untuk mengaktifkan mode pilih' : 'Long press to enable selection mode')
-                : (isSelected
-                    ? (lang == 'id' ? 'Klik untuk batal pilih' : 'Click to deselect')
-                    : (lang == 'id' ? 'Klik untuk memilih baris' : 'Click to select row')),
-            child: InkWell(
-              onLongPress: () {
+          InkWell(
+            onLongPress: () {
+              setState(() {
+                if (isSelected) {
+                  _selectedCardIds.remove(card.id);
+                } else {
+                  _selectedCardIds.add(card.id);
+                }
+              });
+            },
+            onTap: () {
+              if (_selectedCardIds.isNotEmpty) {
                 setState(() {
                   if (isSelected) {
                     _selectedCardIds.remove(card.id);
@@ -2731,42 +2795,33 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                     _selectedCardIds.add(card.id);
                   }
                 });
-              },
-              onTap: () {
-                if (_selectedCardIds.isNotEmpty) {
-                  setState(() {
-                    if (isSelected) {
-                      _selectedCardIds.remove(card.id);
-                    } else {
-                      _selectedCardIds.add(card.id);
-                    }
-                  });
-                }
-              },
-              borderRadius: BorderRadius.circular(10),
-              child: Container(
-                width: 36,
-                height: 36,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
+              }
+            },
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              constraints: const BoxConstraints(minWidth: 46, minHeight: 30),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? const Color(0xFF4CAF50)
+                    : (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05)),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
                   color: isSelected
                       ? const Color(0xFF4CAF50)
-                      : (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05)),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: isSelected
-                        ? const Color(0xFF4CAF50)
-                        : (isDark ? Colors.white24 : Colors.black12),
-                    width: 1.5,
-                  ),
+                      : (isDark ? Colors.white24 : Colors.black12),
+                  width: 1.5,
                 ),
-                child: Text(
-                  originalNo.toString(),
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
-                  ),
+              ),
+              child: Text(
+                originalNo.toString(),
+                maxLines: 1,
+                softWrap: false,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: originalNo.toString().length >= 5 ? 11 : 12.5,
+                  color: isSelected ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
                 ),
               ),
             ),
@@ -2775,15 +2830,13 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
         for (int i = 0; i < widget.columnHeaders.length; i++)
           DataCell(
             ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 280),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8.0),
-                child: Text(
-                  i < columns.length
-                      ? (i == _getTypeColumnIndex() ? _formatCardType(columns[i]) : columns[i])
-                      : '',
-                  softWrap: true,
-                ),
+              constraints: const BoxConstraints(maxWidth: 240),
+              child: Text(
+                i < columns.length
+                    ? (i == _getTypeColumnIndex() ? _formatCardType(columns[i]) : columns[i])
+                    : '',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ),
