@@ -462,13 +462,13 @@ test('Dynamic Column Filtering works for arbitrary columns (e.g. Category & Stat
       expect(getTopPriority(cards[1]), 0);
     });
 
-    test('Dropdown rowsPerPage (25, 50, 100, 250) accurately calculates sublists and totalPages for datasets', () {
+    test('Dropdown rowsPerPage (25, 50, 100) accurately calculates sublists and totalPages for datasets', () {
       final largeCardList = List.generate(
         300,
         (i) => FlashcardCard(id: '$i', columns: ['Word $i', 'Arti $i']),
       );
 
-      for (final rpp in [25, 50, 100, 250]) {
+      for (final rpp in [25, 50, 100]) {
         int currentPage = 0;
         final startIdx = currentPage * rpp;
         final endIdx = ((startIdx + rpp) < largeCardList.length)
@@ -481,7 +481,6 @@ test('Dynamic Column Filtering works for arbitrary columns (e.g. Category & Stat
         if (rpp == 25) expect(totalPages, 12);
         if (rpp == 50) expect(totalPages, 6);
         if (rpp == 100) expect(totalPages, 3);
-        if (rpp == 250) expect(totalPages, 2);
       }
     });
   });

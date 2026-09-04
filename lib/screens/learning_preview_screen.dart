@@ -79,6 +79,9 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
   int _currentPage = 0;
   bool _isRefreshing = false;
 
+  // Table horizontal scroll controller for smooth 60fps scrolling
+  final ScrollController _horizontalScrollController = ScrollController();
+
   // Table Zoom State (50% - 100%)
   int _zoomPercent = 100;
   static const String _zoomPrefKey = 'preview_table_zoom_percent';
@@ -152,8 +155,8 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
         _columnFilters = Map.from(config.columnFilters);
       }
       _lastSelectedFilterColumn = config.lastSelectedFilterColumn;
-      _rangeStart = config.rangeStart ?? deck.lastLearningRangeStart;
-      _rangeEnd = config.rangeEnd ?? deck.lastLearningRangeEnd;
+      _rangeStart = config.rangeStart;
+      _rangeEnd = config.rangeEnd;
       _orderMode = config.orderMode;
     }
 
@@ -216,8 +219,8 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
       }
       _lastSelectedFilterColumn = config.lastSelectedFilterColumn;
 
-      _rangeStart = config.rangeStart ?? deck.lastLearningRangeStart;
-      _rangeEnd = config.rangeEnd ?? deck.lastLearningRangeEnd;
+      _rangeStart = config.rangeStart;
+      _rangeEnd = config.rangeEnd;
       _orderMode = config.orderMode;
     });
 
@@ -252,6 +255,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
 
   @override
   void dispose() {
+    _horizontalScrollController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -916,7 +920,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
               ? widget.columnHeaders[tempSortCol - 1].trim().toLowerCase()
               : '';
           final isType = selectedColName == 'type' || selectedColName == 'tipe';
-          final showTypePriority = isType || tempSortCol == 0;
+          final showTypePriority = isType;
           final isCefr = selectedColName == 'cefr' || selectedColName == 'cerf' || selectedColName == 'level';
           final isNumeric = _isColumnNumeric(tempSortCol);
 
@@ -1260,8 +1264,10 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                   setState(() {
                     _sortColumnIndex = tempSortCol;
                     _sortAscending = tempAscending;
-                    _typeSortPriority = List.from(tempTypePriority);
-                    _formattedTypeCache.clear();
+                    if (isType) {
+                      _typeSortPriority = List.from(tempTypePriority);
+                      _formattedTypeCache.clear();
+                    }
                     _currentPage = 0;
                   });
                   _applyFilterAndSort();
@@ -2875,14 +2881,20 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                         DropdownMenuItem(value: 25, child: Text(lang == 'id' ? '25 baris/hal' : '25/page', style: const TextStyle(fontSize: 12))),
                         DropdownMenuItem(value: 50, child: Text(lang == 'id' ? '50 baris/hal' : '50/page', style: const TextStyle(fontSize: 12))),
                         DropdownMenuItem(value: 100, child: Text(lang == 'id' ? '100 baris/hal' : '100/page', style: const TextStyle(fontSize: 12))),
-                        DropdownMenuItem(value: 250, child: Text(lang == 'id' ? '250 baris/hal' : '250/page', style: const TextStyle(fontSize: 12))),
                       ],
                       onChanged: (val) {
                         if (val != null) {
                           setState(() {
                             _rowsPerPage = val;
                             _currentPage = 0;
+                            // Clear any range restriction below the chosen page size (e.g. 50 limit when choosing 100)
+                            if (_rangeEnd != null && _rangeEnd! < val && (_rangeStart == null || _rangeStart == 1)) {
+                              _rangeStart = null;
+                              _rangeEnd = null;
+                            }
                           });
+                          _applyFilterAndSort();
+                          _saveCurrentConfig();
                         }
                       },
                     ),
@@ -2943,71 +2955,177 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
               )
             else
               SingleChildScrollView(
+                controller: _horizontalScrollController,
                 physics: const ClampingScrollPhysics(),
                 scrollDirection: Axis.horizontal,
-                child: () {
-                  final zoomScale = (_zoomPercent / 100.0).clamp(0.5, 1.0);
-                  return DataTable(
-                    showCheckboxColumn: false,
-                    sortColumnIndex: _sortColumnIndex,
-                    sortAscending: _sortAscending,
-                    columnSpacing: (18.0 * zoomScale).clamp(6.0, 18.0),
-                    dataRowMinHeight: (48.0 * zoomScale).clamp(26.0, 48.0),
-                    dataRowMaxHeight: (48.0 * zoomScale).clamp(26.0, 48.0),
-                    headingRowHeight: (56.0 * zoomScale).clamp(32.0, 56.0),
-                    columns: [
-                      DataColumn(
-                        label: Tooltip(
-                          message: lang == 'id'
-                              ? 'Tekan lama nomor baris No. untuk memilih'
-                              : 'Long press row No. to select',
-                          child: Text(
-                            'No.',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: (14.0 * zoomScale).clamp(9.0, 14.0),
+                clipBehavior: Clip.hardEdge,
+                child: RepaintBoundary(
+                  child: () {
+                    final zoomScale = (_zoomPercent / 100.0).clamp(0.5, 1.0);
+                    final isDark = Theme.of(context).brightness == Brightness.dark;
+                    final isCustomDb = _isCustomDatabase();
+                    final typeColIdx = _getTypeColumnIndex();
+
+                    final noPillWidth = (46.0 * zoomScale).clamp(28.0, 46.0);
+                    final noPillHeight = (30.0 * zoomScale).clamp(20.0, 30.0);
+                    final noPillRadius = BorderRadius.circular(8 * zoomScale);
+                    final noPillBorderWidth = 1.5 * zoomScale;
+                    final noPillPadH = 6 * zoomScale;
+                    final noPillPadV = 3 * zoomScale;
+                    final noPillBoxConstraints = BoxConstraints(minWidth: noPillWidth, minHeight: noPillHeight);
+                    final noPillPadding = EdgeInsets.symmetric(horizontal: noPillPadH, vertical: noPillPadV);
+
+                    final noPillSelectedDecoration = BoxDecoration(
+                      color: const Color(0xFF4CAF50),
+                      borderRadius: noPillRadius,
+                      border: Border.all(
+                        color: const Color(0xFF4CAF50),
+                        width: noPillBorderWidth,
+                      ),
+                    );
+                    final noPillUnselectedDecoration = BoxDecoration(
+                      color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05),
+                      borderRadius: noPillRadius,
+                      border: Border.all(
+                        color: isDark ? Colors.white24 : Colors.black12,
+                        width: noPillBorderWidth,
+                      ),
+                    );
+
+                    final cellFontSize = (13.0 * zoomScale).clamp(8.5, 13.0);
+                    final cellMaxWidth = (240.0 * zoomScale).clamp(110.0, 240.0);
+                    final cellTextStyle = TextStyle(fontSize: cellFontSize);
+
+                    final scoreFontSize = (12.0 * zoomScale).clamp(8.0, 12.0);
+                    final scorePadH = (8.0 * zoomScale).clamp(4.0, 8.0);
+                    final scorePadV = (3.0 * zoomScale).clamp(1.5, 3.0);
+                    final scoreRadius = BorderRadius.circular(6 * zoomScale);
+                    final scorePadding = EdgeInsets.symmetric(horizontal: scorePadH, vertical: scorePadV);
+
+                    final scorePositiveDecoration = BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.15),
+                      borderRadius: scoreRadius,
+                      border: Border.all(color: Colors.green.shade600, width: 1),
+                    );
+                    final scoreNegativeDecoration = BoxDecoration(
+                      color: Colors.red.withValues(alpha: 0.15),
+                      borderRadius: scoreRadius,
+                      border: Border.all(color: Colors.red.shade400, width: 1),
+                    );
+                    final scoreZeroDecoration = BoxDecoration(
+                      color: isDark ? Colors.white10 : Colors.grey.shade200,
+                      borderRadius: scoreRadius,
+                      border: Border.all(color: Colors.grey.shade400, width: 1),
+                    );
+
+                    final scorePositiveStyle = TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: scoreFontSize,
+                      color: Colors.green.shade700,
+                    );
+                    final scoreNegativeStyle = TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: scoreFontSize,
+                      color: Colors.red.shade700,
+                    );
+                    final scoreZeroStyle = TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: scoreFontSize,
+                      color: isDark ? Colors.white70 : Colors.black87,
+                    );
+
+                    const rowSelectedColor = WidgetStatePropertyAll<Color?>(Color(0x264CAF50));
+
+                    final iconBtnSize = (20.0 * zoomScale).clamp(14.0, 20.0);
+                    final iconBtnConstraints = BoxConstraints(minWidth: 26 * zoomScale, minHeight: 26 * zoomScale);
+
+                    return DataTable(
+                      showCheckboxColumn: false,
+                      sortColumnIndex: _sortColumnIndex,
+                      sortAscending: _sortAscending,
+                      columnSpacing: (18.0 * zoomScale).clamp(6.0, 18.0),
+                      dataRowMinHeight: (48.0 * zoomScale).clamp(26.0, 48.0),
+                      dataRowMaxHeight: (48.0 * zoomScale).clamp(26.0, 48.0),
+                      headingRowHeight: (56.0 * zoomScale).clamp(32.0, 56.0),
+                      columns: [
+                        DataColumn(
+                          label: Tooltip(
+                            message: lang == 'id'
+                                ? 'Tekan lama nomor baris No. untuk memilih'
+                                : 'Long press row No. to select',
+                            child: Text(
+                              'No.',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: (14.0 * zoomScale).clamp(9.0, 14.0),
+                              ),
                             ),
                           ),
+                          onSort: (colIdx, asc) => _onSort(0, asc),
                         ),
-                        onSort: (colIdx, asc) => _onSort(0, asc),
-                      ),
-                      for (int i = 0; i < widget.columnHeaders.length; i++)
+                        for (int i = 0; i < widget.columnHeaders.length; i++)
+                          DataColumn(
+                            label: Text(
+                              widget.columnHeaders[i],
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: (14.0 * zoomScale).clamp(9.0, 14.0),
+                              ),
+                            ),
+                            onSort: (colIdx, asc) => _onSort(i + 1, asc),
+                          ),
                         DataColumn(
                           label: Text(
-                            widget.columnHeaders[i],
+                            'Score',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: (14.0 * zoomScale).clamp(9.0, 14.0),
                             ),
                           ),
-                          onSort: (colIdx, asc) => _onSort(i + 1, asc),
+                          onSort: (colIdx, asc) => _onSort(widget.columnHeaders.length + 1, asc),
                         ),
-                      DataColumn(
-                        label: Text(
-                          'Score',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: (14.0 * zoomScale).clamp(9.0, 14.0),
+                        DataColumn(
+                          label: Text(
+                            AppStrings.tableAction(lang),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: (14.0 * zoomScale).clamp(9.0, 14.0),
+                            ),
                           ),
                         ),
-                        onSort: (colIdx, asc) => _onSort(widget.columnHeaders.length + 1, asc),
-                      ),
-                      DataColumn(
-                        label: Text(
-                          AppStrings.tableAction(lang),
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: (14.0 * zoomScale).clamp(9.0, 14.0),
+                      ],
+                      rows: [
+                        for (int i = 0; i < pageCards.length; i++)
+                          _createDataRow(
+                            pageCards[i],
+                            startIdx + i + 1,
+                            zoomScale,
+                            lang: lang,
+                            isDark: isDark,
+                            isCustomDb: isCustomDb,
+                            typeColIdx: typeColIdx,
+                            noPillRadius: noPillRadius,
+                            noPillBoxConstraints: noPillBoxConstraints,
+                            noPillPadding: noPillPadding,
+                            noPillSelectedDecoration: noPillSelectedDecoration,
+                            noPillUnselectedDecoration: noPillUnselectedDecoration,
+                            rowSelectedColor: rowSelectedColor,
+                            cellMaxWidth: cellMaxWidth,
+                            cellTextStyle: cellTextStyle,
+                            scorePadding: scorePadding,
+                            scorePositiveDecoration: scorePositiveDecoration,
+                            scoreNegativeDecoration: scoreNegativeDecoration,
+                            scoreZeroDecoration: scoreZeroDecoration,
+                            scorePositiveStyle: scorePositiveStyle,
+                            scoreNegativeStyle: scoreNegativeStyle,
+                            scoreZeroStyle: scoreZeroStyle,
+                            iconBtnSize: iconBtnSize,
+                            iconBtnConstraints: iconBtnConstraints,
                           ),
-                        ),
-                      ),
-                    ],
-                    rows: [
-                      for (int i = 0; i < pageCards.length; i++)
-                        _createDataRow(pageCards[i], startIdx + i + 1, zoomScale),
-                    ],
-                  );
-                }(),
+                      ],
+                    );
+                  }(),
+                ),
               ),
           ],
         ),
@@ -3015,31 +3133,57 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
     );
   }
 
-  DataRow _createDataRow(FlashcardCard card, int absoluteIndex, double zoomScale) {
-    final lang = context.read<LanguageProvider>().currentLanguage;
-    final originalNo = _cardOriginalNumbers[card.id] ?? absoluteIndex;
-    final columns = card.allColumns;
-    final isCustomDb = _isCustomDatabase();
-    final isSelected = _selectedCardIds.contains(card.id);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+  Widget _buildTableActionBtn({
+    required IconData icon,
+    required Color color,
+    required double size,
+    required BoxConstraints constraints,
+    required VoidCallback onTap,
+  }) {
+    return InkResponse(
+      onTap: onTap,
+      radius: (size * 1.1).clamp(14.0, 24.0),
+      child: Container(
+        constraints: constraints,
+        alignment: Alignment.center,
+        child: Icon(icon, color: color, size: size),
+      ),
+    );
+  }
 
-    final noPillWidth = (46.0 * zoomScale).clamp(28.0, 46.0);
-    final noPillHeight = (30.0 * zoomScale).clamp(20.0, 30.0);
+  DataRow _createDataRow(
+    FlashcardCard card,
+    int absoluteIndex,
+    double zoomScale, {
+    required String lang,
+    required bool isDark,
+    required bool isCustomDb,
+    required int? typeColIdx,
+    required BorderRadius noPillRadius,
+    required BoxConstraints noPillBoxConstraints,
+    required EdgeInsets noPillPadding,
+    required BoxDecoration noPillSelectedDecoration,
+    required BoxDecoration noPillUnselectedDecoration,
+    required WidgetStatePropertyAll<Color?> rowSelectedColor,
+    required double cellMaxWidth,
+    required TextStyle cellTextStyle,
+    required EdgeInsets scorePadding,
+    required BoxDecoration scorePositiveDecoration,
+    required BoxDecoration scoreNegativeDecoration,
+    required BoxDecoration scoreZeroDecoration,
+    required TextStyle scorePositiveStyle,
+    required TextStyle scoreNegativeStyle,
+    required TextStyle scoreZeroStyle,
+    required double iconBtnSize,
+    required BoxConstraints iconBtnConstraints,
+  }) {
+    final originalNo = _cardOriginalNumbers[card.id] ?? absoluteIndex;
+    final columns = card.columns;
+    final isSelected = _selectedCardIds.contains(card.id);
     final noFontSize = ((originalNo.toString().length >= 5 ? 11.0 : 12.5) * zoomScale).clamp(7.5, 12.5);
 
-    final cellFontSize = (13.0 * zoomScale).clamp(8.5, 13.0);
-    final cellMaxWidth = (240.0 * zoomScale).clamp(110.0, 240.0);
-
-    final scoreFontSize = (12.0 * zoomScale).clamp(8.0, 12.0);
-    final scorePadH = (8.0 * zoomScale).clamp(4.0, 8.0);
-    final scorePadV = (3.0 * zoomScale).clamp(1.5, 3.0);
-
-    final iconBtnSize = (20.0 * zoomScale).clamp(14.0, 20.0);
-
     return DataRow(
-      color: isSelected
-          ? const WidgetStatePropertyAll<Color?>(Color(0x264CAF50))
-          : null,
+      color: isSelected ? rowSelectedColor : null,
       cells: [
         DataCell(
           InkWell(
@@ -3063,23 +3207,12 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                 });
               }
             },
-            borderRadius: BorderRadius.circular(8 * zoomScale),
+            borderRadius: noPillRadius,
             child: Container(
-              constraints: BoxConstraints(minWidth: noPillWidth, minHeight: noPillHeight),
-              padding: EdgeInsets.symmetric(horizontal: 6 * zoomScale, vertical: 3 * zoomScale),
+              constraints: noPillBoxConstraints,
+              padding: noPillPadding,
               alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? const Color(0xFF4CAF50)
-                    : (isDark ? Colors.white.withValues(alpha: 0.08) : Colors.black.withValues(alpha: 0.05)),
-                borderRadius: BorderRadius.circular(8 * zoomScale),
-                border: Border.all(
-                  color: isSelected
-                      ? const Color(0xFF4CAF50)
-                      : (isDark ? Colors.white24 : Colors.black12),
-                  width: 1.5 * zoomScale,
-                ),
-              ),
+              decoration: isSelected ? noPillSelectedDecoration : noPillUnselectedDecoration,
               child: Text(
                 originalNo.toString(),
                 maxLines: 1,
@@ -3095,45 +3228,30 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
         ),
         for (int i = 0; i < widget.columnHeaders.length; i++)
           DataCell(
-            ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: cellMaxWidth),
+            SizedBox(
+              width: cellMaxWidth,
               child: Text(
                 i < columns.length
-                    ? (i == _getTypeColumnIndex() ? _formatCardType(columns[i]) : columns[i])
+                    ? (i == typeColIdx ? _formatCardType(columns[i]) : columns[i])
                     : '',
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: cellFontSize),
+                style: cellTextStyle,
               ),
             ),
           ),
         DataCell(
           Center(
             child: Container(
-              padding: EdgeInsets.symmetric(horizontal: scorePadH, vertical: scorePadV),
-              decoration: BoxDecoration(
-                color: card.score > 0
-                    ? Colors.green.withValues(alpha: 0.15)
-                    : (card.score < 0
-                        ? Colors.red.withValues(alpha: 0.15)
-                        : (isDark ? Colors.white10 : Colors.grey.shade200)),
-                borderRadius: BorderRadius.circular(6 * zoomScale),
-                border: Border.all(
-                  color: card.score > 0
-                      ? Colors.green.shade600
-                      : (card.score < 0 ? Colors.red.shade400 : Colors.grey.shade400),
-                  width: 1,
-                ),
-              ),
+              padding: scorePadding,
+              decoration: card.score > 0
+                  ? scorePositiveDecoration
+                  : (card.score < 0 ? scoreNegativeDecoration : scoreZeroDecoration),
               child: Text(
                 card.score.toString(),
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: scoreFontSize,
-                  color: card.score > 0
-                      ? Colors.green.shade700
-                      : (card.score < 0 ? Colors.red.shade700 : (isDark ? Colors.white70 : Colors.black87)),
-                ),
+                style: card.score > 0
+                    ? scorePositiveStyle
+                    : (card.score < 0 ? scoreNegativeStyle : scoreZeroStyle),
               ),
             ),
           ),
@@ -3143,31 +3261,26 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (isCustomDb)
-                IconButton(
-                  icon: Icon(Icons.sync, color: Colors.blueAccent, size: iconBtnSize),
-                  onPressed: () => _handleRefreshSingleCard(card),
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                  constraints: BoxConstraints(minWidth: 26 * zoomScale, minHeight: 26 * zoomScale),
-                  tooltip: lang == 'id' ? 'Refresh baris ini dari dataset sumber' : 'Refresh this row from source dataset',
+                _buildTableActionBtn(
+                  icon: Icons.sync,
+                  color: Colors.blueAccent,
+                  size: iconBtnSize,
+                  constraints: iconBtnConstraints,
+                  onTap: () => _handleRefreshSingleCard(card),
                 ),
-              IconButton(
-                icon: Icon(Icons.edit_outlined, color: Colors.amber, size: iconBtnSize),
-                onPressed: () => _showEditCardDialog(card, originalNo),
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: BoxConstraints(minWidth: 26 * zoomScale, minHeight: 26 * zoomScale),
-                tooltip: lang == 'id' ? 'Edit data baris ini' : 'Edit this row',
+              _buildTableActionBtn(
+                icon: Icons.edit_outlined,
+                color: Colors.amber,
+                size: iconBtnSize,
+                constraints: iconBtnConstraints,
+                onTap: () => _showEditCardDialog(card, originalNo),
               ),
-              IconButton(
-                icon: Icon(Icons.close, color: Colors.red, size: iconBtnSize),
-                onPressed: () => _confirmDelete(card),
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: BoxConstraints(minWidth: 26 * zoomScale, minHeight: 26 * zoomScale),
-                tooltip: isCustomDb
-                    ? (lang == 'id' ? 'Pindahkan ke Deleted Data' : 'Move to Deleted Data')
-                    : (lang == 'id' ? 'Hapus baris' : 'Delete row'),
+              _buildTableActionBtn(
+                icon: Icons.close,
+                color: Colors.red,
+                size: iconBtnSize,
+                constraints: iconBtnConstraints,
+                onTap: () => _confirmDelete(card),
               ),
             ],
           ),

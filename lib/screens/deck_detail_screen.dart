@@ -484,32 +484,7 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
   void _previewLearning(Deck deck) {
     if (deck.cards.isEmpty) return;
 
-    int from = int.tryParse(_fromController.text) ?? 1;
-    int to = int.tryParse(_toController.text) ?? deck.totalCards;
-
-    if (from < 1) from = 1;
-    if (from > deck.totalCards) from = deck.totalCards;
-
-    if (to < 1) to = 1;
-    if (to > deck.totalCards) to = deck.totalCards;
-
-    if (from > to) {
-      final temp = from;
-      from = to;
-      to = temp;
-    }
-
-    _fromController.text = from.toString();
-    _toController.text = to.toString();
-
     final provider = context.read<DeckProvider>();
-    var config = provider.getDeckConfig(deck.id);
-    config = config.copyWith(
-      rangeStart: from,
-      rangeEnd: to,
-      orderMode: _selectedMode,
-    );
-    provider.updateDeckConfig(config);
 
     Navigator.push(
       context,

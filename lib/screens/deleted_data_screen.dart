@@ -485,7 +485,6 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
                         DropdownMenuItem(value: 25, child: Text('25')),
                         DropdownMenuItem(value: 50, child: Text('50')),
                         DropdownMenuItem(value: 100, child: Text('100')),
-                        DropdownMenuItem(value: 250, child: Text('250')),
                       ],
                       onChanged: (val) {
                         if (val != null) {
@@ -514,7 +513,9 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
             else
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
-                child: DataTable(
+                clipBehavior: Clip.hardEdge,
+                child: RepaintBoundary(
+                  child: DataTable(
                   columnSpacing: 24.0,
                   dataRowMinHeight: 48,
                   dataRowMaxHeight: double.infinity,
@@ -543,6 +544,7 @@ class _DeletedDataScreenState extends State<DeletedDataScreen> {
                   ],
                 ),
               ),
+            ),
           ],
         ),
       ),
