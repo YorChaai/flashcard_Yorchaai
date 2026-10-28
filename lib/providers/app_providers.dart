@@ -34,17 +34,29 @@ class DeckProvider extends ChangeNotifier {
         modified = true;
       }
 
+      if (currentDeck.deletedCards.isNotEmpty) {
+        final indexedDeck = currentDeck.ensureStableOriginalIndexes();
+        if (!identical(indexedDeck, currentDeck)) {
+          currentDeck = indexedDeck;
+          modified = true;
+        }
+      }
+
       if (modified) {
         _decks[i] = currentDeck;
         needsSave = true;
       }
     }
     
-    // Auto-create "Custom Mode" deck if it doesn't exist
-    final hasCustomDeck = _decks.any((d) => d.name == 'Custom Mode');
-    if (!hasCustomDeck) {
+    // Keep Custom Mode anchored to its stable ID. Older builds could create a
+    // second copy after its name was changed, so merge copies without losing cards.
+    const customDeckId = 'custom_mode_deck_default';
+    final customCandidates = _decks
+        .where((d) => d.id == customDeckId || d.name == 'Custom Mode')
+        .toList();
+    if (customCandidates.isEmpty) {
       final customDeck = Deck(
-        id: 'custom_mode_deck_default',
+        id: customDeckId,
         name: 'Custom Mode',
         columnCount: DeckColumnHelper.standardCustomHeaders.length,
         columnHeaders: DeckColumnHelper.standardCustomHeaders,
@@ -52,6 +64,59 @@ class DeckProvider extends ChangeNotifier {
       );
       _decks.insert(0, customDeck);
       needsSave = true;
+    } else {
+      customCandidates.sort((a, b) {
+        final dataCountA = a.cards.length + a.deletedCards.length;
+        final dataCountB = b.cards.length + b.deletedCards.length;
+        final countOrder = dataCountB.compareTo(dataCountA);
+        if (countOrder != 0) return countOrder;
+        if (a.id == customDeckId && b.id != customDeckId) return -1;
+        if (b.id == customDeckId && a.id != customDeckId) return 1;
+        if (a.name != 'Custom Mode' && b.name == 'Custom Mode') return -1;
+        if (b.name != 'Custom Mode' && a.name == 'Custom Mode') return 1;
+        return 0;
+      });
+
+      final preferredDeck = customCandidates.first;
+      final mergedCards = <String, FlashcardCard>{};
+      final mergedDeletedCards = <String, FlashcardCard>{};
+      for (final candidate in customCandidates) {
+        for (final card in candidate.cards) {
+          mergedCards.putIfAbsent(card.id, () => card);
+        }
+        for (final card in candidate.deletedCards) {
+          if (!mergedCards.containsKey(card.id)) {
+            mergedDeletedCards.putIfAbsent(card.id, () => card);
+          }
+        }
+      }
+      for (final activeId in mergedCards.keys) {
+        mergedDeletedCards.remove(activeId);
+      }
+
+      final firstCandidateIndex = _decks.indexWhere(
+        (d) => d.id == customDeckId || d.name == 'Custom Mode',
+      );
+      if (preferredDeck.id != customDeckId) {
+        final legacyConfig = await _storageService.getDeckConfig(preferredDeck.id);
+        await _storageService.saveDeckConfig(
+          legacyConfig.copyWith(deckId: customDeckId),
+        );
+      }
+
+      final normalizedCustomDeck = preferredDeck.copyWith(
+        id: customDeckId,
+        cards: mergedCards.values.toList(),
+        deletedCards: mergedDeletedCards.values.toList(),
+      );
+      _decks.removeWhere((d) => d.id == customDeckId || d.name == 'Custom Mode');
+      _decks.insert(
+        firstCandidateIndex.clamp(0, _decks.length).toInt(),
+        normalizedCustomDeck,
+      );
+      if (customCandidates.length != 1 || preferredDeck.id != customDeckId) {
+        needsSave = true;
+      }
     }
 
     // Sanitize & migrate Custom Mode deck: fix broken/misaligned headers and columns
@@ -608,7 +673,8 @@ class DeckProvider extends ChangeNotifier {
 
     final Map<String, int> cardOriginalNumbers = {};
     for (int i = 0; i < deck.cards.length; i++) {
-      cardOriginalNumbers[deck.cards[i].id] = i + 1;
+      cardOriginalNumbers[deck.cards[i].id] =
+          (deck.cards[i].originalIndex ?? i) + 1;
     }
 
     final typeColIdx = deck.columnHeaders.indexWhere((h) {
@@ -824,18 +890,10 @@ class DeckProvider extends ChangeNotifier {
       }
     }
 
-    // 3. RANGE (Slice)
-    if (config.rangeStart != null || config.rangeEnd != null) {
-      if (result.isNotEmpty) {
-        final start = (config.rangeStart ?? 1).clamp(1, result.length) - 1;
-        final end = (config.rangeEnd ?? result.length).clamp(1, result.length);
-        if (start < end) {
-          result = result.sublist(start, end);
-        }
-      }
-    }
+    // Range filtering already used each card's original row number above.
+    // Slicing a second time would treat those numbers as filtered-list offsets.
 
-    // 4. ORDER MODE
+    // 3. ORDER MODE
     if (applyOrderMode) {
       switch (config.orderMode) {
         case OrderMode.normal:
@@ -860,6 +918,8 @@ class DeckProvider extends ChangeNotifier {
 
 class LearningSessionProvider extends ChangeNotifier {
   List<FlashcardCard> _sessionCards = [];
+  List<int>? _sessionCardNumbers;
+  int? _displayRangeEnd;
   int _currentIndex = 0;
   OrderMode _orderMode = OrderMode.normal;
   bool _isFlipped = false;
@@ -873,6 +933,11 @@ class LearningSessionProvider extends ChangeNotifier {
   String? _currentDeckId;
 
   int get currentIndex => _currentIndex;
+  int? get currentCardNumber =>
+      _sessionCardNumbers != null && _currentIndex < _sessionCardNumbers!.length
+          ? _sessionCardNumbers![_currentIndex]
+          : null;
+  int? get displayRangeEnd => _displayRangeEnd;
   int get totalCards => _sessionCards.length;
   FlashcardCard? get currentCard =>
       _sessionCards.isNotEmpty ? _sessionCards[_currentIndex] : null;
@@ -893,10 +958,18 @@ class LearningSessionProvider extends ChangeNotifier {
   double get progressPercent =>
       totalCards > 0 ? (knownCount / totalCards) * 100 : 0;
 
-  void startSession(List<FlashcardCard> cards, OrderMode mode, {String? deckId}) {
+  void startSession(
+    List<FlashcardCard> cards,
+    OrderMode mode, {
+    String? deckId,
+    List<int>? cardNumbers,
+    int? displayRangeEnd,
+  }) {
     _knownCardIds.clear();
     _unknownCardIds.clear();
     _currentDeckId = deckId;
+    _sessionCardNumbers = cardNumbers == null ? null : List<int>.from(cardNumbers);
+    _displayRangeEnd = displayRangeEnd;
 
     if (cards.isEmpty) {
       _sessionCards = [];

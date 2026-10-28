@@ -53,7 +53,7 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
         _fromController.text =
             (config.rangeStart ?? deck.lastLearningRangeStart ?? 1).toString();
         _toController.text =
-            (config.rangeEnd ?? deck.lastLearningRangeEnd ?? deck.totalCards)
+            (config.rangeEnd ?? deck.lastLearningRangeEnd ?? deck.maxOriginalNumber)
                 .toString();
         _selectedMode = config.orderMode;
         _rangeInitialized = true;
@@ -72,8 +72,8 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
     }
 
     // Fix for when starting from 0 cards
-    if (int.tryParse(_toController.text) == 0 && deck.totalCards > 0) {
-      _toController.text = deck.totalCards.toString();
+    if (int.tryParse(_toController.text) == 0 && deck.maxOriginalNumber > 0) {
+      _toController.text = deck.maxOriginalNumber.toString();
     }
 
     // Set _toController if empty (moved from here to didChangeDependencies)
@@ -226,7 +226,7 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                           _toController.text =
                               (config.rangeEnd ??
                                       newDeck.lastLearningRangeEnd ??
-                                      newDeck.totalCards)
+                                      newDeck.maxOriginalNumber)
                                   .toString();
                           _selectedMode = config.orderMode;
                         });
@@ -258,7 +258,7 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                       runSpacing: 8,
                       children: [
                         Text(
-                          AppStrings.availableData(lang, deck.totalCards),
+                          AppStrings.availableData(lang, deck.maxOriginalNumber),
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.grey[600],
@@ -306,7 +306,7 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                             ],
                             decoration: InputDecoration(
                               labelText: AppStrings.to(lang),
-                              hintText: deck.totalCards.toString(),
+                              hintText: deck.maxOriginalNumber.toString(),
                               border: const OutlineInputBorder(),
                             ),
                           ),
@@ -431,13 +431,14 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
     if (deck == null || deck.cards.isEmpty) return;
 
     int from = int.tryParse(_fromController.text) ?? 1;
-    int to = int.tryParse(_toController.text) ?? deck.totalCards;
+    final maxRangeNumber = deck.maxOriginalNumber;
+    int to = int.tryParse(_toController.text) ?? maxRangeNumber;
 
     if (from < 1) from = 1;
-    if (from > deck.totalCards) from = deck.totalCards;
+    if (from > maxRangeNumber) from = maxRangeNumber;
 
     if (to < 1) to = 1;
-    if (to > deck.totalCards) to = deck.totalCards;
+    if (to > maxRangeNumber) to = maxRangeNumber;
 
     if (from > to) {
       final temp = from;
@@ -466,10 +467,20 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
       return;
     }
 
+    final originalNumbersByCardId = <String, int>{};
+    for (var i = 0; i < deck.cards.length; i++) {
+      final card = deck.cards[i];
+      originalNumbersByCardId[card.id] = (card.originalIndex ?? i) + 1;
+    }
+    final cardNumbers = processedCards
+        .map((card) => originalNumbersByCardId[card.id] ?? 0)
+        .toList();
     context.read<LearningSessionProvider>().startSession(
       processedCards,
       OrderMode.normal,
       deckId: deck.id,
+      cardNumbers: cardNumbers,
+      displayRangeEnd: to,
     );
 
     Navigator.push(
@@ -499,7 +510,7 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
       final updatedConfig = provider.getDeckConfig(deck.id);
       setState(() {
         _fromController.text = (updatedConfig.rangeStart ?? 1).toString();
-        _toController.text = (updatedConfig.rangeEnd ?? deck.totalCards)
+        _toController.text = (updatedConfig.rangeEnd ?? deck.maxOriginalNumber)
             .toString();
         _selectedMode = updatedConfig.orderMode;
       });

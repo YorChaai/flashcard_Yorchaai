@@ -96,6 +96,19 @@ class Deck {
 
   int get totalCards => cards.length;
   int get totalDeletedCards => deletedCards.length;
+  int get maxOriginalNumber {
+    var maximum = cards.length;
+    for (var i = 0; i < cards.length; i++) {
+      maximum = max(maximum, (cards[i].originalIndex ?? i) + 1).toInt();
+    }
+    for (final card in deletedCards) {
+      final originalIndex = card.originalIndex;
+      if (originalIndex != null) {
+        maximum = max(maximum, originalIndex + 1).toInt();
+      }
+    }
+    return maximum;
+  }
 
   @override
   bool operator ==(Object other) {
@@ -161,21 +174,24 @@ class Deck {
 
   /// Adds a new card to the deck.
   Deck addCard(FlashcardCard newCard) {
-    final newCards = List<FlashcardCard>.from(cards)..add(newCard);
+    final hasStableIndexes = cards.any((card) => card.originalIndex != null) ||
+        deletedCards.any((card) => card.originalIndex != null);
+    final cardToAdd = newCard.originalIndex == null && hasStableIndexes
+        ? newCard.copyWith(originalIndex: maxOriginalNumber)
+        : newCard;
+    final newCards = List<FlashcardCard>.from(cards)..add(cardToAdd);
     return copyWith(cards: newCards);
   }
 
   /// Soft delete: removes a card from active cards and moves it into deletedCards with its original position saved.
   Deck softDeleteCard(String cardId) {
-    int idx = cards.indexWhere((c) => c.id == cardId);
+    final indexedCards = _cardsWithStableOriginalIndexes();
+    int idx = indexedCards.indexWhere((c) => c.id == cardId);
     if (idx == -1) return this;
 
-    final target = cards[idx];
-    final cardToSave = target.copyWith(
-      originalIndex: target.originalIndex ?? idx,
-    );
+    final cardToSave = indexedCards[idx];
 
-    final newCards = List<FlashcardCard>.from(cards)..removeAt(idx);
+    final newCards = List<FlashcardCard>.from(indexedCards)..removeAt(idx);
     final newDeleted = List<FlashcardCard>.from(deletedCards);
     if (!newDeleted.any((c) => c.id == cardId)) {
       newDeleted.add(cardToSave);
@@ -204,8 +220,14 @@ class Deck {
     if (!newCards.any((c) => c.id == cardId)) {
       final insertIdx = target.originalIndex;
       if (insertIdx != null && insertIdx >= 0) {
-        final safeIdx = insertIdx.clamp(0, newCards.length);
-        newCards.insert(safeIdx, target);
+        newCards.add(target);
+        newCards.sort((a, b) {
+          final indexA = a.originalIndex;
+          final indexB = b.originalIndex;
+          if (indexA == null) return indexB == null ? 0 : 1;
+          if (indexB == null) return -1;
+          return indexA.compareTo(indexB);
+        });
       } else {
         newCards.add(target);
       }
@@ -215,6 +237,49 @@ class Deck {
       cards: newCards,
       deletedCards: newDeleted,
     );
+  }
+
+  /// Assigns stable zero-based row numbers before the first deletion and keeps
+  /// existing row numbers intact after cards have been removed or restored.
+  List<FlashcardCard> _cardsWithStableOriginalIndexes() {
+    final usedIndexes = deletedCards
+        .map((card) => card.originalIndex)
+        .whereType<int>()
+        .toSet();
+    final result = <FlashcardCard>[];
+    var nextIndex = 0;
+
+    for (final card in cards) {
+      var originalIndex = card.originalIndex;
+      if (originalIndex == null ||
+          originalIndex < nextIndex ||
+          usedIndexes.contains(originalIndex)) {
+        while (usedIndexes.contains(nextIndex)) {
+          nextIndex++;
+        }
+        originalIndex = nextIndex;
+      }
+
+      usedIndexes.add(originalIndex);
+      result.add(
+        card.originalIndex == originalIndex
+            ? card
+            : card.copyWith(originalIndex: originalIndex),
+      );
+      nextIndex = originalIndex + 1;
+    }
+
+    return result;
+  }
+
+  /// Migrates active cards when a deck already has soft-deleted rows.
+  Deck ensureStableOriginalIndexes() {
+    if (deletedCards.isEmpty) return this;
+    final indexedCards = _cardsWithStableOriginalIndexes();
+    final changed = indexedCards.asMap().entries.any(
+      (entry) => entry.value.originalIndex != cards[entry.key].originalIndex,
+    );
+    return changed ? copyWith(cards: indexedCards) : this;
   }
 
   /// Removes a card from the deck by its id.

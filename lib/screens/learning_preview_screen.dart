@@ -114,7 +114,8 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
     _allCards = List.from(widget.previewCards);
     _cardOriginalNumbers.clear();
     for (int i = 0; i < _allCards.length; i++) {
-      _cardOriginalNumbers[_allCards[i].id] = i + 1;
+      _cardOriginalNumbers[_allCards[i].id] =
+          (_allCards[i].originalIndex ?? i) + 1;
     }
     _extractUniqueTypes();
     _extractUniqueColumnValues();
@@ -271,6 +272,9 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
     }
     return context.read<DeckProvider>().selectedDeck;
   }
+
+  int get _maxOriginalNumber =>
+      _getCurrentDeck()?.maxOriginalNumber ?? _allCards.length;
 
   bool _isCustomDatabase() {
     final deck = _getCurrentDeck();
@@ -533,7 +537,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
 
     final hasRange = _rangeStart != null || _rangeEnd != null;
     final rangeStart = _rangeStart ?? 1;
-    final rangeEnd = _rangeEnd ?? _allCards.length;
+    final rangeEnd = _rangeEnd ?? _maxOriginalNumber;
 
     // Single unified filtering pass: O(N)
     final List<FlashcardCard> result = [];
@@ -779,8 +783,9 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
   void _showRangeDialog() {
     final lang = context.read<LanguageProvider>().currentLanguage;
     final totalCards = _allCards.length;
+    final maxOriginalNumber = _maxOriginalNumber;
     final fromController = TextEditingController(text: (_rangeStart ?? 1).toString());
-    final toController = TextEditingController(text: (_rangeEnd ?? totalCards).toString());
+    final toController = TextEditingController(text: (_rangeEnd ?? maxOriginalNumber).toString());
 
     showDialog(
       context: context,
@@ -857,11 +862,11 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
           ElevatedButton(
             onPressed: () {
               int from = int.tryParse(fromController.text.trim()) ?? 1;
-              int to = int.tryParse(toController.text.trim()) ?? totalCards;
+              int to = int.tryParse(toController.text.trim()) ?? maxOriginalNumber;
               if (from < 1) from = 1;
-              if (from > totalCards) from = totalCards;
+              if (from > maxOriginalNumber) from = maxOriginalNumber;
               if (to < 1) to = 1;
-              if (to > totalCards) to = totalCards;
+              if (to > maxOriginalNumber) to = maxOriginalNumber;
               if (from > to) {
                 final tmp = from;
                 from = to;
@@ -1634,7 +1639,8 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
         _allCards = List.from(updatedDeck.cards);
         _cardOriginalNumbers.clear();
         for (int i = 0; i < _allCards.length; i++) {
-          _cardOriginalNumbers[_allCards[i].id] = i + 1;
+          _cardOriginalNumbers[_allCards[i].id] =
+              (_allCards[i].originalIndex ?? i) + 1;
         }
       });
       _extractUniqueTypes();
@@ -1914,7 +1920,8 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                           _allCards = List.from(updatedDeck.cards);
                           _cardOriginalNumbers.clear();
                           for (int i = 0; i < _allCards.length; i++) {
-                            _cardOriginalNumbers[_allCards[i].id] = i + 1;
+                            _cardOriginalNumbers[_allCards[i].id] =
+                                (_allCards[i].originalIndex ?? i) + 1;
                           }
                         });
                         _extractUniqueTypes();
@@ -2275,7 +2282,8 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                         _allCards = List.from(updatedDeck.cards);
                         _cardOriginalNumbers.clear();
                         for (int i = 0; i < _allCards.length; i++) {
-                          _cardOriginalNumbers[_allCards[i].id] = i + 1;
+                          _cardOriginalNumbers[_allCards[i].id] =
+                              (_allCards[i].originalIndex ?? i) + 1;
                         }
                       });
                       _extractUniqueTypes();
@@ -2575,7 +2583,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                   final IconData sortIcon;
 
                   if (isSortNo) {
-                    sortLabel = 'Sort: No. (${_sortAscending ? "1→${_allCards.length}" : "${_allCards.length}→1"})';
+                    sortLabel = 'Sort: No. (${_sortAscending ? "1→$_maxOriginalNumber" : "$_maxOriginalNumber→1"})';
                     sortIcon = _sortAscending ? Icons.arrow_upward : Icons.arrow_downward;
                   } else if (isSortType) {
                     sortLabel = 'Sort: Type (${_sortAscending ? (lang == 'id' ? "Prioritas #1" : "Priority #1") : (lang == 'id' ? "Prioritas Terbalik" : "Reverse Priority")})';
@@ -2692,7 +2700,7 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
                 if (isRangeFiltered) {
                   activeItems.add(_ActiveFilterItem(
                     icon: Icons.linear_scale_rounded,
-                    label: 'Range: ${_rangeStart ?? 1}–${_rangeEnd ?? _allCards.length}',
+                    label: 'Range: ${_rangeStart ?? 1}–${_rangeEnd ?? _maxOriginalNumber}',
                     onDeleted: () {
                       setState(() {
                         _rangeStart = null;

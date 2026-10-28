@@ -92,8 +92,10 @@ class _FlashcardScreenState extends State<FlashcardScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title:
-            Text('${sessionProvider.currentIndex + 1} / ${sessionProvider.totalCards}'),
+        title: Text(
+          '${sessionProvider.currentCardNumber ?? sessionProvider.currentIndex + 1} / '
+          '${sessionProvider.displayRangeEnd ?? sessionProvider.totalCards}',
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.copy_rounded),
