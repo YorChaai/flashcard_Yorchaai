@@ -3,19 +3,57 @@ import 'package:flutter/foundation.dart';
 import '../models/deck.dart';
 import '../models/deck_config.dart';
 import '../models/flashcard_card.dart';
+import '../models/flashcard_app_mode.dart';
 import '../models/order_mode.dart';
 import '../services/storage_service.dart';
 import '../services/excel_service.dart';
 import '../utils/deck_column_helper.dart';
+import 'language_provider.dart';
+import 'theme_provider.dart';
 
 class DeckProvider extends ChangeNotifier {
-  final StorageService _storageService = StorageService();
+  static const String customDeckId = 'custom_mode_deck_default';
+  FlashcardAppMode _currentMode = FlashcardAppMode.language;
+  StorageService _storageService = StorageService(mode: FlashcardAppMode.language);
   List<Deck> _decks = [];
   Deck? _selectedDeck;
   final Map<String, DeckConfig> _deckConfigs = {};
 
   List<Deck> get decks => _decks;
   Deck? get selectedDeck => _selectedDeck;
+  FlashcardAppMode get currentMode => _currentMode;
+  StorageService get storageService => _storageService;
+
+  Future<void> setMode(FlashcardAppMode mode, {LanguageProvider? langProv, ThemeProvider? themeProv}) async {
+    if (_currentMode == mode && _decks.isNotEmpty) {
+      await langProv?.setAppMode(mode);
+      await themeProv?.setAppMode(mode);
+      return;
+    }
+    _currentMode = mode;
+    _storageService = StorageService(mode: mode);
+    _selectedDeck = null;
+    _deckConfigs.clear();
+    await langProv?.setAppMode(mode);
+    await themeProv?.setAppMode(mode);
+    await loadDecks();
+  }
+
+  Future<String?> getLastSelectedDeckId() async {
+    return _storageService.getLastSelectedDeckId();
+  }
+
+  Future<void> setLastSelectedDeckId(String? id) async {
+    await _storageService.setLastSelectedDeckId(id);
+  }
+
+  Future<String?> getReferenceDeckId() async {
+    return _storageService.getReferenceDeckId();
+  }
+
+  Future<void> setReferenceDeckId(String? id) async {
+    await _storageService.setReferenceDeckId(id);
+  }
 
   Future<void> loadDecks() async {
     _decks = await _storageService.loadDecks();
@@ -51,6 +89,9 @@ class DeckProvider extends ChangeNotifier {
     // Keep Custom Mode anchored to its stable ID. Older builds could create a
     // second copy after its name was changed, so merge copies without losing cards.
     const customDeckId = 'custom_mode_deck_default';
+    final customHeaders = _currentMode == FlashcardAppMode.language
+        ? DeckColumnHelper.standardCustomHeaders
+        : DeckColumnHelper.standardAllCustomHeaders;
     final customCandidates = _decks
         .where((d) => d.id == customDeckId || d.name == 'Custom Mode')
         .toList();
@@ -58,8 +99,8 @@ class DeckProvider extends ChangeNotifier {
       final customDeck = Deck(
         id: customDeckId,
         name: 'Custom Mode',
-        columnCount: DeckColumnHelper.standardCustomHeaders.length,
-        columnHeaders: DeckColumnHelper.standardCustomHeaders,
+        columnCount: customHeaders.length,
+        columnHeaders: customHeaders,
         cards: [],
       );
       _decks.insert(0, customDeck);
@@ -120,15 +161,20 @@ class DeckProvider extends ChangeNotifier {
     }
 
     // Sanitize & migrate Custom Mode deck: fix broken/misaligned headers and columns
-    final customIdx = _decks.indexWhere((d) => d.id == 'custom_mode_deck_default');
+    final customIdx = _decks.indexWhere((d) => d.id == customDeckId);
     if (customIdx != -1) {
       final customDeck = _decks[customIdx];
       final isHeaderBroken = customDeck.columnHeaders.join('|') !=
-          DeckColumnHelper.standardCustomHeaders.join('|');
+          customHeaders.join('|');
       final hasCards = customDeck.cards.isNotEmpty;
       if (isHeaderBroken || hasCards) {
         final otherDecks = _decks.where((d) => d.id != customDeck.id).toList();
-        final sanitized = DeckColumnHelper.sanitizeAndAlignCustomDeck(customDeck, otherDecks);
+        final sanitized = _currentMode == FlashcardAppMode.language
+            ? DeckColumnHelper.sanitizeAndAlignCustomDeck(customDeck, otherDecks)
+            : customDeck.copyWith(
+                columnHeaders: customHeaders,
+                columnCount: customHeaders.length,
+              );
         _decks[customIdx] = sanitized;
         needsSave = true;
       }

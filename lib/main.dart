@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import 'providers/app_providers.dart';
 import 'providers/language_provider.dart';
 import 'providers/theme_provider.dart';
-import 'screens/home_screen.dart';
+import 'screens/main_hub_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -47,7 +47,7 @@ class YorFlashCardApp extends StatelessWidget {
             theme: _buildLightTheme(),
             darkTheme: _buildDarkTheme(),
             themeMode: themeProv.themeMode,
-            home: const HomeScreen(),
+            home: const MainHubScreen(),
           );
         },
       ),

@@ -12,6 +12,8 @@ class Deck {
   final List<FlashcardCard> deletedCards;
   final int? lastLearningRangeStart;
   final int? lastLearningRangeEnd;
+  final List<int>? excelMapping;
+  final String? sourceFileName;
 
   Deck({
     String? id,
@@ -23,6 +25,8 @@ class Deck {
     List<FlashcardCard>? deletedCards,
     this.lastLearningRangeStart,
     this.lastLearningRangeEnd,
+    this.excelMapping,
+    this.sourceFileName,
   })  : visibleColumnCount = visibleColumnCount ?? columnCount,
         deletedCards = deletedCards ?? const [],
         id = id ?? const Uuid().v4();
@@ -37,6 +41,8 @@ class Deck {
     List<FlashcardCard>? deletedCards,
     int? lastLearningRangeStart,
     int? lastLearningRangeEnd,
+    List<int>? excelMapping,
+    String? sourceFileName,
   }) {
     return Deck(
       id: id ?? this.id,
@@ -48,6 +54,8 @@ class Deck {
       deletedCards: deletedCards != null ? List.from(deletedCards) : List.from(this.deletedCards),
       lastLearningRangeStart: lastLearningRangeStart ?? this.lastLearningRangeStart,
       lastLearningRangeEnd: lastLearningRangeEnd ?? this.lastLearningRangeEnd,
+      excelMapping: excelMapping != null ? List<int>.from(excelMapping) : (this.excelMapping != null ? List<int>.from(this.excelMapping!) : null),
+      sourceFileName: sourceFileName ?? this.sourceFileName,
     );
   }
 
@@ -62,6 +70,8 @@ class Deck {
       'deletedCards': deletedCards.map((card) => card.toJson()).toList(),
       'lastLearningRangeStart': lastLearningRangeStart,
       'lastLearningRangeEnd': lastLearningRangeEnd,
+      'excelMapping': excelMapping,
+      'sourceFileName': sourceFileName,
     };
   }
 
@@ -91,6 +101,10 @@ class Deck {
           [],
       lastLearningRangeStart: json['lastLearningRangeStart'] as int?,
       lastLearningRangeEnd: json['lastLearningRangeEnd'] as int?,
+      excelMapping: json['excelMapping'] != null
+          ? List<int>.from(json['excelMapping'] as List)
+          : null,
+      sourceFileName: json['sourceFileName'] as String?,
     );
   }
 

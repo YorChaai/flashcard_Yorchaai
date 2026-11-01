@@ -2,6 +2,14 @@ import '../models/deck.dart';
 import '../models/flashcard_card.dart';
 
 class DeckColumnHelper {
+  static const List<String> standardAllCustomHeaders = [
+    'Pertanyaan',
+    'Jawaban',
+    'Source File',
+    'Penjelasan',
+    'Kategori',
+  ];
+
   static const List<String> standardCustomHeaders = [
     'Kata',
     'Arti',

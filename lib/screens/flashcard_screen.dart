@@ -2,6 +2,7 @@ import 'dart:math' show pi;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/app_providers.dart';
 import '../providers/language_provider.dart';
 import '../providers/theme_provider.dart';
@@ -26,10 +27,100 @@ class _FlashcardScreenState extends State<FlashcardScreen>
   late AnimationController _animationController;
   late Animation<double> _flipAnimation;
   bool _isShowingBack = false;
+  // Default {1}: selalu reset ke 1 kolom (depan) saat pindah kartu
+  // Jika {All}: mempertahankan tampilan semua kolom jika sedang dibuka
+  bool _autoResetToOneColumn = true;
+
+  void _prepareCardTransition() {
+    if (_autoResetToOneColumn) {
+      if (_isShowingBack) {
+        _animationController.reset();
+        setState(() => _isShowingBack = false);
+      }
+    } else {
+      if (_isShowingBack) {
+        _animationController.value = 1.0;
+      } else {
+        _animationController.reset();
+      }
+    }
+  }
+
+  Widget _buildViewModeToggle() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final borderColor = isDark ? Colors.white54 : Colors.grey.shade500;
+    final textColor = isDark ? Colors.white : Colors.grey.shade900;
+
+    return Center(
+      child: Tooltip(
+        message: _autoResetToOneColumn
+            ? 'Mode {1}: Setiap pindah kartu otomatis ke 1 kolom (Depan)'
+            : 'Mode {All}: Setiap pindah kartu mempertahankan semua kolom',
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              final newVal = !_autoResetToOneColumn;
+              setState(() {
+                _autoResetToOneColumn = newVal;
+              });
+              _saveViewModePreference(newVal);
+            },
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: borderColor,
+                  width: 1.2,
+                ),
+              ),
+              child: Text(
+                _autoResetToOneColumn ? '1' : 'All',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: textColor,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _loadViewModePreference() async {
+    try {
+      final mode = context.read<DeckProvider>().currentMode;
+      final prefs = await SharedPreferences.getInstance();
+      final key = '${mode.storagePrefix}flashcard_auto_reset_one_column';
+      final val = prefs.getBool(key);
+      if (val != null && mounted) {
+        setState(() {
+          _autoResetToOneColumn = val;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _saveViewModePreference(bool val) async {
+    try {
+      final mode = context.read<DeckProvider>().currentMode;
+      final prefs = await SharedPreferences.getInstance();
+      final key = '${mode.storagePrefix}flashcard_auto_reset_one_column';
+      await prefs.setBool(key, val);
+    } catch (_) {}
+  }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadViewModePreference();
+    });
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,
@@ -92,6 +183,14 @@ class _FlashcardScreenState extends State<FlashcardScreen>
 
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: 108,
+        leading: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const BackButton(),
+            _buildViewModeToggle(),
+          ],
+        ),
         title: Text(
           '${sessionProvider.currentCardNumber ?? sessionProvider.currentIndex + 1} / '
           '${sessionProvider.displayRangeEnd ?? sessionProvider.totalCards}',
@@ -189,9 +288,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () {
-                      // Tidak Tahu: reset display → 1 kolom, record, maju ke NEXT
-                      _animationController.reset();
-                      setState(() => _isShowingBack = false);
+                      _prepareCardTransition();
                       if (isLastCard) {
                         sessionProvider.markKnown(false, onCardUpdated: (c) {
                           final dp = context.read<DeckProvider>();
@@ -218,9 +315,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () {
-                      // Tahu: reset display → 1 kolom, record, maju ke NEXT
-                      _animationController.reset();
-                      setState(() => _isShowingBack = false);
+                      _prepareCardTransition();
                       if (isLastCard) {
                         sessionProvider.markKnown(true, onCardUpdated: (c) {
                           final dp = context.read<DeckProvider>();
@@ -257,7 +352,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                   child: OutlinedButton.icon(
                     onPressed: sessionProvider.currentIndex > 0
                         ? () {
-                            // Previous: KEEP current display mode as-is
+                            _prepareCardTransition();
                             sessionProvider.previousCard();
                           }
                         : null,
@@ -282,7 +377,7 @@ class _FlashcardScreenState extends State<FlashcardScreen>
                           ),
                         );
                       } else {
-                        // Next: KEEP current display mode as-is
+                        _prepareCardTransition();
                         sessionProvider.nextCard();
                       }
                     },
@@ -363,11 +458,14 @@ class _FlashcardScreenState extends State<FlashcardScreen>
 
   Widget _buildScoreAndPracticeAction(flashcard_models.FlashcardCard card) {
     final lang = context.watch<LanguageProvider>().currentLanguage;
+    final deckProvider = context.watch<DeckProvider>();
+    final showWritingPractice = deckProvider.currentMode.enableWritingPractice;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Tooltip(
-          message: AppStrings.writingPractice(lang),
+        if (showWritingPractice) ...[
+          Tooltip(
+            message: AppStrings.writingPractice(lang),
           child: Material(
             color: Colors.transparent,
             child: InkWell(
@@ -397,7 +495,8 @@ class _FlashcardScreenState extends State<FlashcardScreen>
             ),
           ),
         ),
-        const SizedBox(width: 8),
+          const SizedBox(width: 8),
+        ],
         _buildScoreBadge(card.score, lang),
       ],
     );

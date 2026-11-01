@@ -88,8 +88,10 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
 
   Future<void> _loadZoomPreference() async {
     try {
+      final mode = context.read<DeckProvider>().currentMode;
       final prefs = await SharedPreferences.getInstance();
-      final saved = prefs.getInt(_zoomPrefKey);
+      final key = '${mode.storagePrefix}preview_table_zoom_percent';
+      final saved = prefs.getInt(key) ?? prefs.getInt(_zoomPrefKey);
       if (saved != null && saved >= 50 && saved <= 100) {
         if (mounted) {
           setState(() {
@@ -102,7 +104,10 @@ class _LearningPreviewScreenState extends State<LearningPreviewScreen> {
 
   Future<void> _saveZoomPreference(int value) async {
     try {
+      final mode = context.read<DeckProvider>().currentMode;
       final prefs = await SharedPreferences.getInstance();
+      final key = '${mode.storagePrefix}preview_table_zoom_percent';
+      await prefs.setInt(key, value);
       await prefs.setInt(_zoomPrefKey, value);
     } catch (_) {}
   }

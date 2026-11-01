@@ -9,7 +9,8 @@ import '../models/order_mode.dart';
 import '../models/deck.dart';
 import '../models/font_size_settings.dart';
 import '../models/flashcard_card.dart';
-import '../services/storage_service.dart';
+import '../models/flashcard_app_mode.dart';
+
 import '../utils/app_strings.dart';
 import '../utils/deck_column_helper.dart';
 import 'flashcard_screen.dart';
@@ -215,7 +216,7 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                       if (newDeck != null && newDeck.id != deck.id) {
                         final provider = context.read<DeckProvider>();
                         provider.selectDeck(newDeck);
-                        StorageService().setLastSelectedDeckId(newDeck.id);
+                        provider.setLastSelectedDeckId(newDeck.id);
                         final config = provider.getDeckConfig(newDeck.id);
                         setState(() {
                           _fromController.text =
@@ -333,12 +334,21 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                   children: [
                     ListTile(
                       leading: Radio<OrderMode>(
-                        // ignore: deprecated_member_use
                         value: OrderMode.normal,
                         // ignore: deprecated_member_use
-                        groupValue: _selectedMode,
+groupValue: _selectedMode,
+                        fillColor: WidgetStateProperty.resolveWith<Color>((states) {
+                          if (states.contains(WidgetState.selected)) {
+                            return Theme.of(context).brightness == Brightness.dark
+                                ? Colors.blue.shade400
+                                : Theme.of(context).primaryColor;
+                          }
+                          return Theme.of(context).brightness == Brightness.dark
+                              ? Colors.white
+                              : Colors.black54;
+                        }),
                         // ignore: deprecated_member_use
-                        onChanged: (value) {
+onChanged: (value) {
                           if (value != null) {
                             setState(() {
                               _selectedMode = value;
@@ -356,12 +366,21 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                     ),
                     ListTile(
                       leading: Radio<OrderMode>(
-                        // ignore: deprecated_member_use
                         value: OrderMode.reverse,
                         // ignore: deprecated_member_use
-                        groupValue: _selectedMode,
+groupValue: _selectedMode,
+                        fillColor: WidgetStateProperty.resolveWith<Color>((states) {
+                          if (states.contains(WidgetState.selected)) {
+                            return Theme.of(context).brightness == Brightness.dark
+                                ? Colors.blue.shade400
+                                : Theme.of(context).primaryColor;
+                          }
+                          return Theme.of(context).brightness == Brightness.dark
+                              ? Colors.white
+                              : Colors.black54;
+                        }),
                         // ignore: deprecated_member_use
-                        onChanged: (value) {
+onChanged: (value) {
                           if (value != null) {
                             setState(() {
                               _selectedMode = value;
@@ -379,12 +398,21 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                     ),
                     ListTile(
                       leading: Radio<OrderMode>(
-                        // ignore: deprecated_member_use
                         value: OrderMode.random,
                         // ignore: deprecated_member_use
-                        groupValue: _selectedMode,
+groupValue: _selectedMode,
+                        fillColor: WidgetStateProperty.resolveWith<Color>((states) {
+                          if (states.contains(WidgetState.selected)) {
+                            return Theme.of(context).brightness == Brightness.dark
+                                ? Colors.blue.shade400
+                                : Theme.of(context).primaryColor;
+                          }
+                          return Theme.of(context).brightness == Brightness.dark
+                              ? Colors.white
+                              : Colors.black54;
+                        }),
                         // ignore: deprecated_member_use
-                        onChanged: (value) {
+onChanged: (value) {
                           if (value != null) {
                             setState(() {
                               _selectedMode = value;
@@ -407,16 +435,30 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
 
             const SizedBox(height: 32),
 
-            ElevatedButton(
+            ElevatedButton.icon(
               onPressed: _startLearning,
+              icon: const Icon(Icons.play_arrow, size: 24, color: Colors.white),
+              label: Text(
+                AppStrings.startLearningButton(lang),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
               style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
+                padding: const EdgeInsets.symmetric(vertical: 18),
                 backgroundColor: Theme.of(context).primaryColor,
                 foregroundColor: Colors.white,
-              ),
-              child: Text(
-                AppStrings.startLearningButton(lang),
-                style: const TextStyle(fontSize: 18),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.white
+                        : Theme.of(context).primaryColor,
+                    width: 1.5,
+                  ),
+                ),
               ),
             ),
           ],
@@ -735,12 +777,64 @@ class _DeckDetailScreenState extends State<DeckDetailScreen> {
                                 ),
                               ),
                             ),
-                            title: Text(
-                              AppStrings.formatColumnHeader(headerName, lang),
-                              style: TextStyle(
-                                fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-                                fontSize: 14,
-                                color: isActive ? null : Colors.grey[600],
+                            title: InkWell(
+                              borderRadius: BorderRadius.circular(4),
+                              onTap: () async {
+                                final editCtrl = TextEditingController(text: headerName);
+                                final newName = await showDialog<String>(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    title: Text(
+                                      lang == 'id'
+                                          ? 'Ubah Nama Kolom #${idx + 1}'
+                                          : 'Edit Column #${idx + 1} Name',
+                                    ),
+                                    content: TextField(
+                                      controller: editCtrl,
+                                      autofocus: true,
+                                      decoration: InputDecoration(
+                                        labelText: lang == 'id' ? 'Nama Kolom' : 'Column Name',
+                                        border: const OutlineInputBorder(),
+                                      ),
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(ctx),
+                                        child: Text(AppStrings.cancel(lang)),
+                                      ),
+                                      ElevatedButton(
+                                        onPressed: () => Navigator.pop(ctx, editCtrl.text.trim()),
+                                        child: Text(AppStrings.save(lang)),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                if (newName != null && newName.isNotEmpty) {
+                                  setDialogState(() {
+                                    columnHeaders[idx] = newName;
+                                  });
+                                }
+                              },
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      AppStrings.formatColumnHeader(headerName, lang),
+                                      style: TextStyle(
+                                        fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                                        fontSize: 14,
+                                        color: isActive ? null : Colors.grey[600],
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                    Icons.edit_outlined,
+                                    size: 15,
+                                    color: isActive ? Colors.blueGrey : Colors.grey[400],
+                                  ),
+                                ],
                               ),
                             ),
                             trailing: Row(
@@ -1189,10 +1283,21 @@ class _AddCustomCardDialogState extends State<_AddCustomCardDialog> {
           .where((d) => d.id != widget.currentDeck.id)
           .toList();
 
+      final defaultHeaders = deckProvider.currentMode == FlashcardAppMode.language
+          ? DeckColumnHelper.standardCustomHeaders
+          : DeckColumnHelper.standardAllCustomHeaders;
+      final existingHeaders = widget.currentDeck.columnHeaders.isNotEmpty
+          ? widget.currentDeck.columnHeaders
+          : defaultHeaders;
+      final targetColumnCount = max(widget.currentDeck.columnCount, existingHeaders.length);
+      final targetVisibleCount = widget.currentDeck.visibleColumnCount > 0
+          ? widget.currentDeck.visibleColumnCount
+          : targetColumnCount;
+
       Deck targetDeck = widget.currentDeck.copyWith(
-        columnHeaders: DeckColumnHelper.standardCustomHeaders,
-        columnCount: DeckColumnHelper.standardCustomHeaders.length,
-        visibleColumnCount: DeckColumnHelper.standardCustomHeaders.length,
+        columnHeaders: existingHeaders,
+        columnCount: targetColumnCount,
+        visibleColumnCount: targetVisibleCount,
       );
 
       for (final row in validRows) {
@@ -1213,17 +1318,28 @@ class _AddCustomCardDialogState extends State<_AddCustomCardDialog> {
 
           if (matchInDeck != null) {
             foundAny = true;
-            final newColumns = DeckColumnHelper.buildStandardCustomColumns(
-              kata: kata,
-              arti: arti,
-              sourceName: deck.name,
-              sourceCard: matchInDeck,
-              sourceHeaders: deck.columnHeaders,
-            );
+            List<String> newColumns;
+            if (widget.currentDeck.id == DeckProvider.customDeckId &&
+                deckProvider.currentMode == FlashcardAppMode.language) {
+              newColumns = DeckColumnHelper.buildStandardCustomColumns(
+                kata: kata,
+                arti: arti,
+                sourceName: deck.name,
+                sourceCard: matchInDeck,
+                sourceHeaders: deck.columnHeaders,
+              );
+            } else {
+              newColumns = List<String>.from(matchInDeck.columns);
+              if (newColumns.isNotEmpty) newColumns[0] = kata;
+              if (newColumns.length > 1 && arti.isNotEmpty) newColumns[1] = arti;
+            }
+            while (newColumns.length < targetColumnCount) {
+              newColumns.add('');
+            }
 
             targetDeck = targetDeck.addCard(
               FlashcardCard(
-                columns: newColumns,
+                columns: newColumns.sublist(0, targetColumnCount),
                 score: matchInDeck.score,
               ),
             );
@@ -1232,14 +1348,23 @@ class _AddCustomCardDialogState extends State<_AddCustomCardDialog> {
         }
 
         if (!foundAny) {
-          final newColumns = DeckColumnHelper.buildStandardCustomColumns(
-            kata: kata,
-            arti: arti,
-            sourceName: 'Manual/Custom',
-          );
+          List<String> newColumns;
+          if (widget.currentDeck.id == DeckProvider.customDeckId &&
+              deckProvider.currentMode == FlashcardAppMode.language) {
+            newColumns = DeckColumnHelper.buildStandardCustomColumns(
+              kata: kata,
+              arti: arti,
+              sourceName: 'Manual/Custom',
+            );
+          } else {
+            newColumns = [kata, arti, 'Manual/Custom'];
+          }
+          while (newColumns.length < targetColumnCount) {
+            newColumns.add('');
+          }
 
           targetDeck = targetDeck.addCard(
-            FlashcardCard(columns: newColumns),
+            FlashcardCard(columns: newColumns.sublist(0, targetColumnCount)),
           );
         }
       }
@@ -1275,9 +1400,16 @@ class _AddCustomCardDialogState extends State<_AddCustomCardDialog> {
   @override
   Widget build(BuildContext context) {
     final lang = context.watch<LanguageProvider>().currentLanguage;
+    final isLanguage = context.watch<DeckProvider>().currentMode == FlashcardAppMode.language;
+    final col1Label = widget.currentDeck.columnHeaders.isNotEmpty
+        ? widget.currentDeck.columnHeaders[0]
+        : (isLanguage ? 'Kata' : (lang == 'id' ? 'Pertanyaan' : 'Question'));
+    final col2Label = widget.currentDeck.columnHeaders.length > 1
+        ? widget.currentDeck.columnHeaders[1]
+        : (isLanguage ? 'Arti' : (lang == 'id' ? 'Jawaban' : 'Answer'));
 
     return AlertDialog(
-      title: Text(AppStrings.addNewWords(lang)),
+      title: Text(isLanguage ? AppStrings.addNewWords(lang) : (lang == 'id' ? 'Tambah Kartu Baru' : 'Add New Cards')),
       content: SizedBox(
         width: double.maxFinite,
         child: SingleChildScrollView(
@@ -1292,7 +1424,7 @@ class _AddCustomCardDialogState extends State<_AddCustomCardDialog> {
                   children: [
                     Expanded(
                       child: Text(
-                        AppStrings.formatColumnHeader('Kata', lang),
+                        AppStrings.formatColumnHeader(col1Label, lang),
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -1303,7 +1435,7 @@ class _AddCustomCardDialogState extends State<_AddCustomCardDialog> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        AppStrings.formatColumnHeader('Arti', lang),
+                        AppStrings.formatColumnHeader(col2Label, lang),
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -1332,7 +1464,7 @@ class _AddCustomCardDialogState extends State<_AddCustomCardDialog> {
                           controller: rowItem.kataController,
                           autofocus: i == 0,
                           decoration: InputDecoration(
-                            hintText: '${AppStrings.formatColumnHeader('Kata', lang)} ${i + 1}',
+                            hintText: '${AppStrings.formatColumnHeader(col1Label, lang)} ${i + 1}',
                             border: const OutlineInputBorder(),
                             isDense: true,
                             contentPadding: const EdgeInsets.symmetric(
@@ -1354,7 +1486,7 @@ class _AddCustomCardDialogState extends State<_AddCustomCardDialog> {
                         child: TextField(
                           controller: rowItem.artiController,
                           decoration: InputDecoration(
-                            hintText: '${AppStrings.formatColumnHeader('Arti', lang)} ${i + 1}',
+                            hintText: '${AppStrings.formatColumnHeader(col2Label, lang)} ${i + 1}',
                             border: OutlineInputBorder(
                               borderSide: BorderSide(
                                 color: hasError ? Colors.red : Colors.grey,

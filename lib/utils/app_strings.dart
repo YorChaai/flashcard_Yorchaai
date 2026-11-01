@@ -3,6 +3,31 @@
 /// tetap dipertahankan dalam bahasa aslinya saat mode Indonesia dipilih.
 class AppStrings {
   // ==========================================
+  // === 0. MAIN HUB / LAUNCHER ===
+  // ==========================================
+  static String hubTitle(String lang) => 'YorFlashCard Hub';
+
+  static String hubSubtitle(String lang) =>
+      lang == 'id' ? 'Pilih Ruang Flashcard Anda' : 'Choose Your Flashcard Space';
+
+  static String modeLanguageTitle(String lang) => 'Flashcard Language';
+
+  static String modeLanguageDesc(String lang) =>
+      lang == 'id'
+          ? 'Belajar kosakata & bahasa dengan Latihan Menulis'
+          : 'Language learning & vocabulary with Writing Practice';
+
+  static String modeAllTitle(String lang) => 'Flashcard All';
+
+  static String modeAllDesc(String lang) =>
+      lang == 'id'
+          ? 'Flashcard serbaguna untuk semua subjek & hafalan umum'
+          : 'All-purpose flashcards for any subject & general study';
+
+  static String backToHub(String lang) =>
+      lang == 'id' ? 'Kembali ke Hub' : 'Back to Hub';
+
+  // ==========================================
   // === 1. HOME SCREEN & STATS ===
   // ==========================================
   static String smartLearningApp(String lang) =>

@@ -8,9 +8,10 @@ import '../providers/app_providers.dart';
 import '../providers/language_provider.dart';
 import '../providers/theme_provider.dart';
 import '../models/deck.dart';
+import '../models/flashcard_app_mode.dart';
 import '../models/font_size_settings.dart';
 import '../services/excel_service.dart';
-import '../services/storage_service.dart';
+
 import '../utils/app_strings.dart';
 import 'deck_detail_screen.dart';
 import 'import_preview_screen.dart';
@@ -36,7 +37,10 @@ class _HomeScreenState extends State<HomeScreen> {
       final provider = context.read<DeckProvider>();
       await provider.loadDecks();
       if (mounted && provider.decks.isNotEmpty) {
-        final lastDeckId = await StorageService().getLastSelectedDeckId();
+        final lastDeckId = await provider.getLastSelectedDeckId();
+        const customDeckId = 'custom_mode_deck_default';
+
+
         Deck? savedDeck;
         if (lastDeckId != null) {
           try {
@@ -46,8 +50,8 @@ class _HomeScreenState extends State<HomeScreen> {
           }
         }
         
-        // If no saved deck or saved deck is 'Custom Mode', and there are other decks, prefer the second one
-        savedDeck ??= provider.decks.firstWhere((d) => d.id != 'custom_mode_deck_default', orElse: () => provider.decks.first);
+        // If no saved deck or saved deck is 'Custom Mode', and there are other decks, prefer the other one
+        savedDeck ??= provider.decks.firstWhere((d) => d.id != customDeckId, orElse: () => provider.decks.first);
 
         setState(() {
           _selectedDataset = savedDeck;
@@ -73,6 +77,85 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  const SizedBox(height: 8),
+
+                  // Top Navigation Bar (Back to Hub + Active Mode Badge)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Back to Hub Button
+                      InkWell(
+                        onTap: () {
+                          if (Navigator.canPop(context)) {
+                            Navigator.pop(context);
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).brightness == Brightness.dark
+                                ? const Color(0xFF1E1E2E)
+                                : Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: Theme.of(context).brightness == Brightness.dark
+                                  ? Colors.white24
+                                  : Colors.grey.shade300,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.arrow_back_rounded, size: 18),
+                              const SizedBox(width: 6),
+                              Text(
+                                AppStrings.backToHub(lang),
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      // Active Mode Chip
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: deckProvider.currentMode.primaryAccentColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: deckProvider.currentMode.primaryAccentColor.withValues(alpha: 0.35),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              deckProvider.currentMode.icon,
+                              size: 16,
+                              color: deckProvider.currentMode.primaryAccentColor,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              deckProvider.currentMode == FlashcardAppMode.language
+                                  ? AppStrings.modeLanguageTitle(lang)
+                                  : AppStrings.modeAllTitle(lang),
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.bold,
+                                color: deckProvider.currentMode.primaryAccentColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+
                   const SizedBox(height: 20),
 
                   // Header
@@ -86,7 +169,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(
-                                color: Theme.of(context).primaryColor.withValues(alpha: 0.3),
+                                color: deckProvider.currentMode.primaryAccentColor.withValues(alpha: 0.25),
                                 blurRadius: 20,
                                 spreadRadius: 5,
                               ),
@@ -97,7 +180,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               'asset/logo/logoapp.png',
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) => Container(
-                                color: Theme.of(context).primaryColor,
+                                color: deckProvider.currentMode.primaryAccentColor,
                                 child: const Icon(
                                   Icons.menu_book,
                                   size: 40,
@@ -108,18 +191,13 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        const Text(
-                          'YorFlashCard',
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
                         Text(
-                          AppStrings.smartLearningApp(lang),
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[600],
+                          deckProvider.currentMode == FlashcardAppMode.language
+                              ? AppStrings.modeLanguageTitle(lang)
+                              : AppStrings.modeAllTitle(lang),
+                          style: const TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
                       ],

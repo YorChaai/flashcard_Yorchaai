@@ -3,13 +3,65 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/deck.dart';
 import '../models/deck_config.dart';
+import '../models/flashcard_app_mode.dart';
 
 class StorageService {
-  static const String _decksKey = 'yorflashcard_decks';
-  static const String _refDeckKey = 'yorflashcard_ref_deck_id';
-  static const String _lastDeckKey = 'yorflashcard_last_deck_id';
-  static const String _deckConfigsPrefix = 'yorflashcard_deck_config_';
+  final FlashcardAppMode mode;
+
+  // Legacy keys (sebelum pemisahan mode)
+  static const String _legacyDecksKey = 'yorflashcard_decks';
+  static const String _legacyRefDeckKey = 'yorflashcard_ref_deck_id';
+  static const String _legacyLastDeckKey = 'yorflashcard_last_deck_id';
+  static const String _legacyDeckConfigsPrefix = 'yorflashcard_deck_config_';
+
   static SharedPreferences? _prefs;
+
+  StorageService({this.mode = FlashcardAppMode.language});
+
+  @visibleForTesting
+  static void setMockPrefs(SharedPreferences prefs) {
+    _prefs = prefs;
+  }
+
+  // === Excel Column Mapping Persistence per File ===
+  static String _excelMappingKey(String fileName) =>
+      'yorflashcard_file_excel_mapping_${fileName.trim().toLowerCase()}';
+
+  static Future<void> saveExcelMappingForFile(String fileName, List<int> mapping) async {
+    try {
+      final prefs = _prefs ?? await SharedPreferences.getInstance();
+      await prefs.setString(_excelMappingKey(fileName), jsonEncode(mapping));
+    } catch (e) {
+      debugPrint('ERROR: Failed to save excel mapping for $fileName: $e');
+    }
+  }
+
+  static Future<List<int>?> getExcelMappingForFile(String fileName) async {
+    try {
+      final prefs = _prefs ?? await SharedPreferences.getInstance();
+      final str = prefs.getString(_excelMappingKey(fileName));
+      if (str != null && str.isNotEmpty) {
+        final decoded = jsonDecode(str);
+        if (decoded is List) {
+          return decoded.map((e) => (e as num).toInt()).toList();
+        }
+      }
+    } catch (e) {
+      debugPrint('ERROR: Failed to get excel mapping for $fileName: $e');
+    }
+    return null;
+  }
+
+  @visibleForTesting
+  static void clearMockPrefs() {
+    _prefs = null;
+  }
+
+  String get _prefix => mode.storagePrefix;
+  String get _decksKey => '${_prefix}decks';
+  String get _refDeckKey => '${_prefix}ref_deck_id';
+  String get _lastDeckKey => '${_prefix}last_deck_id';
+  String get _deckConfigsPrefix => '${_prefix}deck_config_';
 
   Future<SharedPreferences> _getPrefs() async {
     _prefs ??= await SharedPreferences.getInstance();
@@ -19,7 +71,17 @@ class StorageService {
   Future<List<Deck>> loadDecks() async {
     try {
       final prefs = await _getPrefs();
-      final jsonString = prefs.getString(_decksKey);
+      String? jsonString = prefs.getString(_decksKey);
+
+      // Migrasi aman: Jika mode language belum punya data baru, cek apakah ada data legacy
+      if (jsonString == null && mode == FlashcardAppMode.language) {
+        final legacyJson = prefs.getString(_legacyDecksKey);
+        if (legacyJson != null && legacyJson.isNotEmpty) {
+          jsonString = legacyJson;
+          // Salin ke key baru untuk mode language
+          await prefs.setString(_decksKey, legacyJson);
+        }
+      }
 
       if (jsonString == null) return [];
 
@@ -48,7 +110,16 @@ class StorageService {
   Future<DeckConfig> getDeckConfig(String deckId) async {
     try {
       final prefs = await _getPrefs();
-      final jsonString = prefs.getString('$_deckConfigsPrefix$deckId');
+      var jsonString = prefs.getString('$_deckConfigsPrefix$deckId');
+
+      if (jsonString == null && mode == FlashcardAppMode.language) {
+        final legacyConfig = prefs.getString('$_legacyDeckConfigsPrefix$deckId');
+        if (legacyConfig != null && legacyConfig.isNotEmpty) {
+          jsonString = legacyConfig;
+          await prefs.setString('$_deckConfigsPrefix$deckId', legacyConfig);
+        }
+      }
+
       if (jsonString != null && jsonString.isNotEmpty) {
         final Map<String, dynamic> jsonMap = jsonDecode(jsonString);
         return DeckConfig.fromJson(jsonMap);
@@ -71,7 +142,14 @@ class StorageService {
 
   Future<String?> getReferenceDeckId() async {
     final prefs = await _getPrefs();
-    return prefs.getString(_refDeckKey);
+    String? id = prefs.getString(_refDeckKey);
+    if (id == null && mode == FlashcardAppMode.language) {
+      id = prefs.getString(_legacyRefDeckKey);
+      if (id != null) {
+        await prefs.setString(_refDeckKey, id);
+      }
+    }
+    return id;
   }
 
   Future<void> setReferenceDeckId(String? id) async {
@@ -85,7 +163,14 @@ class StorageService {
 
   Future<String?> getLastSelectedDeckId() async {
     final prefs = await _getPrefs();
-    return prefs.getString(_lastDeckKey);
+    String? id = prefs.getString(_lastDeckKey);
+    if (id == null && mode == FlashcardAppMode.language) {
+      id = prefs.getString(_legacyLastDeckKey);
+      if (id != null) {
+        await prefs.setString(_lastDeckKey, id);
+      }
+    }
+    return id;
   }
 
   Future<void> setLastSelectedDeckId(String? id) async {

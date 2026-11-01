@@ -1,7 +1,9 @@
+import 'dart:math' show max;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/language_provider.dart';
 import '../services/excel_service.dart';
+import '../services/storage_service.dart';
 import '../utils/app_strings.dart';
 
 class ImportMappingDialog extends StatefulWidget {
@@ -26,6 +28,27 @@ class _ImportMappingDialogState extends State<ImportMappingDialog> {
     if (_numFlashcardColumns < 1) _numFlashcardColumns = 1;
 
     _updateSelectionList(initial: true);
+    _loadSavedMapping();
+  }
+
+  Future<void> _loadSavedMapping() async {
+    final saved = await StorageService.getExcelMappingForFile(widget.metadata.fileName);
+    if (saved != null && saved.isNotEmpty && mounted) {
+      final maxAvailable = max(12, widget.metadata.columnHeaders.length);
+      final count = saved.length.clamp(1, maxAvailable);
+      setState(() {
+        _numFlashcardColumns = count;
+        _selectedExcelColumns = saved.take(count).map((col) {
+          if (col >= 0 && col < widget.metadata.columnHeaders.length) {
+            return col;
+          }
+          return null;
+        }).toList();
+        while (_selectedExcelColumns.length < _numFlashcardColumns) {
+          _selectedExcelColumns.add(null);
+        }
+      });
+    }
   }
 
   void _updateSelectionList({bool initial = false}) {
@@ -80,6 +103,7 @@ class _ImportMappingDialogState extends State<ImportMappingDialog> {
 
     // importOrder[flashcardColIdx] = excelColIdx (-1 for empty slots)
     List<int> importOrder = _selectedExcelColumns.map((e) => e ?? -1).toList();
+    StorageService.saveExcelMappingForFile(widget.metadata.fileName, importOrder);
 
     Navigator.of(context).pop(importOrder);
   }
@@ -126,7 +150,7 @@ class _ImportMappingDialogState extends State<ImportMappingDialog> {
                   DropdownButton<int>(
                     value: _numFlashcardColumns,
                     items: List.generate(
-                      widget.metadata.columnHeaders.isNotEmpty ? widget.metadata.columnHeaders.length : 1,
+                      max(12, max(widget.metadata.columnHeaders.length, _numFlashcardColumns)),
                       (index) => index + 1,
                     ).map((val) {
                       return DropdownMenuItem(

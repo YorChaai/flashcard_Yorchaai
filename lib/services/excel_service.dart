@@ -40,7 +40,7 @@ class FileMetadata {
       if (idx >= 0 && idx < columnHeaders.length) {
         newHeaders.add(columnHeaders[idx]);
       } else {
-        newHeaders.add('Empty Column');
+        newHeaders.add('Kolom ');
       }
     }
 
@@ -156,6 +156,7 @@ class ExcelService {
         decoder = SpreadsheetDecoder.decodeBytes(cleanBytes);
       }
       return _buildDeckFromDecoder(decoder, params.deckName,
+          fileName: params.fileName,
           targetSheetName: params.targetSheetName, importOrder: params.importOrder);
     } catch (e) {
       throw Exception(
@@ -210,7 +211,7 @@ class ExcelService {
     return bytes;
   }
 
-  static Deck _buildDeckFromDecoder(SpreadsheetDecoder decoder, String deckName, {String? targetSheetName, List<int>? importOrder}) {
+  static Deck _buildDeckFromDecoder(SpreadsheetDecoder decoder, String deckName, {String? fileName, String? targetSheetName, List<int>? importOrder}) {
     final cards = <FlashcardCard>[];
     List<String> headers = [];
     int dataColumnCount = 0;
@@ -239,7 +240,8 @@ class ExcelService {
         rawHeaders.add(headerRow[i]?.toString() ?? 'Column ${rawHeaders.length + 1}');
       }
       
-      dataColumnCount = rawHeaders.length;
+      final targetColumnCount = importOrder != null ? importOrder.length : rawHeaders.length;
+      dataColumnCount = targetColumnCount;
 
       // Apply importOrder to headers
       if (importOrder != null) {
@@ -247,7 +249,7 @@ class ExcelService {
           if (idx >= 0 && idx < rawHeaders.length) {
             headers.add(rawHeaders[idx]);
           } else {
-            headers.add('Empty Column');
+            headers.add('Kolom ');
           }
         }
       } else {
@@ -316,6 +318,8 @@ class ExcelService {
       columnCount: dataColumnCount,
       columnHeaders: headers,
       cards: cards,
+      excelMapping: importOrder != null ? List<int>.from(importOrder) : null,
+      sourceFileName: fileName,
     );
   }
 

@@ -91,4 +91,74 @@ void main() {
 
     expect(find.text('Session Complete!'), findsOneWidget);
   });
+
+  testWidgets('ViewMode toggle button {1} / {All} toggles and controls transition behavior', (WidgetTester tester) async {
+    final themeProvider = ThemeProvider();
+    final languageProvider = LanguageProvider();
+    final deckProvider = DeckProvider();
+    final sessionProvider = LearningSessionProvider();
+
+    final cards = [
+      FlashcardCard(columns: ['Front 1', 'Back 1']),
+      FlashcardCard(columns: ['Front 2', 'Back 2']),
+      FlashcardCard(columns: ['Front 3', 'Back 3']),
+    ];
+    final deck = Deck(
+      id: 'deck-viewmode',
+      name: 'ViewMode Deck',
+      columnHeaders: ['Front', 'Back'],
+      cards: cards,
+    );
+
+    deckProvider.selectDeck(deck);
+    sessionProvider.startSession(cards, OrderMode.normal);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider.value(value: themeProvider),
+          ChangeNotifierProvider.value(value: languageProvider),
+          ChangeNotifierProvider.value(value: deckProvider),
+          ChangeNotifierProvider.value(value: sessionProvider),
+        ],
+        child: const MaterialApp(
+          home: FlashcardScreen(),
+        ),
+      ),
+    );
+
+    // 1. Initially, mode button shows '1' (default)
+    expect(find.text('1'), findsOneWidget);
+    expect(find.text('Front 1'), findsOneWidget);
+
+    // Flip card to reveal back
+    await tester.tap(find.text('Front 1'));
+    await tester.pumpAndSettle();
+    expect(find.text('Back 1'), findsOneWidget);
+
+    // In mode {1}, pressing Next resets to Front on the next card
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+    expect(find.text('Front 2'), findsOneWidget);
+
+    // 2. Tap toggle button to switch to {All}
+    await tester.tap(find.text('1'));
+    await tester.pumpAndSettle();
+    expect(find.text('All'), findsOneWidget);
+
+    // Flip card to reveal back
+    await tester.tap(find.text('Front 2'));
+    await tester.pumpAndSettle();
+    expect(find.text('Back 2'), findsOneWidget);
+
+    // In mode {All}, pressing Next preserves back on the next card
+    await tester.tap(find.text('Next'));
+    await tester.pumpAndSettle();
+    expect(find.text('Back 3'), findsOneWidget);
+
+    // In mode {All}, pressing Previous preserves back on the previous card
+    await tester.tap(find.text('Previous'));
+    await tester.pumpAndSettle();
+    expect(find.text('Back 2'), findsOneWidget);
+  });
 }
